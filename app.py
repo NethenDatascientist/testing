@@ -75,15 +75,12 @@ COL_TARGET_DATE = "ಕಾಮಗಾರಿ ಮುಕ್ತಾಯಗೊಳಿಸಬ
 COL_ACTUAL_DATE = "ಮುಕ್ತಾಯವಾದ ದಿನಾಂಕ"
 COL_STATUS_STD = "CP/CF/P/TBS/TP/ETS/OTH"
 
-# Standard known CP/CF status codes (also merged dynamically with any new terms in the sheet)
-STANDARD_STATUS_CODES = ["P", "CP", "CF", "TBS", "TP", "ETS", "ETH", "OTH"]
-
 DEFAULT_SHEET_URL = st.secrets.get(
     "SHEET_URL",
     "https://docs.google.com/spreadsheets/d/13W04z-fdU3RhuVJ5vQFRpK4BBSQRJWfscPqpr7Oj2Y8/edit?gid=1055199869#gid=1055199869",
 )
 
-DISK_BACKUP_FILE = "/tmp/mi_overdue_shared_snapshot_v2.pkl"
+DISK_BACKUP_FILE = "/tmp/mi_overdue_shared_snapshot_v3.pkl"
 
 
 # -----------------------------------------------------------------------------
@@ -274,17 +271,6 @@ def is_valid_officer_name(name: str) -> bool:
     return True
 
 
-def is_valid_status_token(token: str) -> bool:
-    """Filter out summary/header noise when building the status dropdown list."""
-    if not token or len(token) > 25:
-        return False
-    if "CP/CF" in token or "ಒಟ್ಟು" in token or "TOTAL" in token:
-        return False
-    if token.isdigit():
-        return False
-    return True
-
-
 def shorten_label(name: str, max_len: int = 26) -> str:
     """Keep Y-axis labels compact so the chart always starts on the far left."""
     return name if len(name) <= max_len else name[: max_len - 1] + "…"
@@ -294,14 +280,14 @@ def convert_df_to_excel_bytes(df: pd.DataFrame) -> bytes:
     """Export a DataFrame to an in-memory .xlsx file."""
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Works_Report")
+        df.to_excel(writer, index=False, sheet_name="Overdue_Works")
     return output.getvalue()
 
 
 def parse_xlsx_workbook(workbook_bytes: bytes):
     """
-    Parse the 23 target worksheets and store all valid rows so any CP/CF status
-    filter ('ALL', 'ETH', 'P, CP', etc.) can be applied instantaneously.
+    Parse the 23 target worksheets using pd.ExcelFile + pd.read_excel
+    (automatically uses fast Rust 'calamine' engine if installed, else 'openpyxl').
     """
     progress = st.progress(0, text="Opening workbook...")
 
@@ -317,7 +303,7 @@ def parse_xlsx_workbook(workbook_bytes: bytes):
     today_ist = pd.Timestamp(datetime.now(ZoneInfo("Asia/Kolkata")).date())
 
     compiled_rows = []
-    full_work_rows = []
+    full_overdue_rows = []
     sheet_diagnostics = []
 
     total_targets = len(TARGET_SHEETS)
@@ -336,7 +322,8 @@ def parse_xlsx_workbook(workbook_bytes: bytes):
                     "Sheet": target,
                     "Status": "Missing in Workbook",
                     "Rows Loaded": 0,
-                    "Date-Overdue Rows (All Statuses)": 0,
+                    "Overdue Rows ('P')": 0,
+                    "ETS Rows": 0,
                 }
             )
             continue
@@ -349,7 +336,8 @@ def parse_xlsx_workbook(workbook_bytes: bytes):
                         "Sheet": target,
                         "Status": "Empty Sheet",
                         "Rows Loaded": 0,
-                        "Date-Overdue Rows (All Statuses)": 0,
+                        "Overdue Rows ('P')": 0,
+                        "ETS Rows": 0,
                     }
                 )
                 continue
@@ -371,7 +359,8 @@ def parse_xlsx_workbook(workbook_bytes: bytes):
                         "Sheet": target,
                         "Status": "Header Row Not Found",
                         "Rows Loaded": 0,
-                        "Date-Overdue Rows (All Statuses)": 0,
+                        "Overdue Rows ('P')": 0,
+                        "ETS Rows": 0,
                     }
                 )
                 continue
@@ -397,7 +386,8 @@ def parse_xlsx_workbook(workbook_bytes: bytes):
                         "Sheet": target,
                         "Status": f"Missing Columns: {', '.join(sorted(missing_keys))}",
                         "Rows Loaded": 0,
-                        "Date-Overdue Rows (All Statuses)": 0,
+                        "Overdue Rows ('P')": 0,
+                        "ETS Rows": 0,
                     }
                 )
                 continue
@@ -406,45 +396,49 @@ def parse_xlsx_workbook(workbook_bytes: bytes):
 
             s_so = df.iloc[:, col_idx_map["so"]].map(normalize_text)
             s_aee = df.iloc[:, col_idx_map["aee"]].map(normalize_text)
-            s_status_raw = df.iloc[:, col_idx_map["status"]].map(normalize_text)
-            s_status_norm = s_status_raw.str.upper().str.strip()
+            s_status = df.iloc[:, col_idx_map["status"]].map(normalize_text)
+            s_status_upper = s_status.str.upper().str.strip()
             s_target_raw = df.iloc[:, col_idx_map["target_date"]]
             s_actual_raw = df.iloc[:, col_idx_map["actual_date"]]
 
             target_dt = parse_indian_date(s_target_raw)
             actual_empty = is_empty_date(s_actual_raw)
 
-            # Date-based overdue condition:
-            # ಕಾಮಗಾರಿ ಮುಕ್ತಾಯಗೊಳಿಸಬೇಕಾದ ದಿನಾಂಕ < Today AND ಮುಕ್ತಾಯವಾದ ದಿನಾಂಕ is empty
-            is_date_overdue = (
-                target_dt.notna()
+            is_status_p = s_status_upper == "P"
+            is_status_ets = s_status_upper == "ETS"
+
+            # Overdue Logic: Status is 'P'/'p', target date < Today, actual completion date is empty
+            is_overdue = (
+                is_status_p
+                & target_dt.notna()
                 & (target_dt < today_ist)
                 & actual_empty
             )
 
-            valid_row_mask = (s_status_norm != "") | (s_so != "") | (s_aee != "")
+            valid_row_mask = (s_status != "") | (s_so != "") | (s_aee != "")
 
             sub = pd.DataFrame(
                 {
                     "sheet_name": target,
                     "so_name": s_so,
                     "aee_name": s_aee,
-                    "status_raw": s_status_raw,
-                    "status_norm": s_status_norm,
+                    "status_raw": s_status,
                     "target_date_raw": s_target_raw.map(format_cell_for_display),
                     "actual_date_raw": s_actual_raw.map(format_cell_for_display),
                     "target_dt": target_dt,
                     "actual_empty": actual_empty,
-                    "is_date_overdue": is_date_overdue,
+                    "is_status_p": is_status_p,
+                    "is_status_ets": is_status_ets,
+                    "is_overdue": is_overdue,
                 }
             )
             sub = sub[valid_row_mask].reset_index(drop=True)
             compiled_rows.append(sub)
 
-            # Store full columns for all valid rows so any selected CP/CF status can be viewed/downloaded
-            if valid_row_mask.any():
+            overdue_mask = valid_row_mask & is_overdue
+            if overdue_mask.any():
                 unique_headers = build_clean_unique_headers(raw_headers, col_idx_map)
-                full_df = df.loc[valid_row_mask].copy()
+                full_df = df.loc[overdue_mask].copy()
                 full_df.columns = unique_headers
 
                 unnamed_cols = [
@@ -458,21 +452,18 @@ def parse_xlsx_workbook(workbook_bytes: bytes):
                     full_df[col] = full_df[col].map(format_cell_for_display)
 
                 full_df.insert(0, "Worksheet / ಯೋಜನೆ", target)
-                full_df["_so_name"] = s_so.loc[valid_row_mask].values
-                full_df["_aee_name"] = s_aee.loc[valid_row_mask].values
-                full_df["_status_norm"] = s_status_norm.loc[valid_row_mask].values
-                full_df["_is_date_overdue"] = is_date_overdue.loc[valid_row_mask].values
+                full_df["_so_name"] = s_so.loc[overdue_mask].values
+                full_df["_aee_name"] = s_aee.loc[overdue_mask].values
 
-                full_work_rows.append(full_df.reset_index(drop=True))
+                full_overdue_rows.append(full_df.reset_index(drop=True))
 
             sheet_diagnostics.append(
                 {
                     "Sheet": target,
                     "Status": "Loaded",
                     "Rows Loaded": len(sub),
-                    "Date-Overdue Rows (All Statuses)": int(
-                        (valid_row_mask & is_date_overdue).sum()
-                    ),
+                    "Overdue Rows ('P')": int(overdue_mask.sum()),
+                    "ETS Rows": int((valid_row_mask & is_status_ets).sum()),
                 }
             )
 
@@ -482,7 +473,8 @@ def parse_xlsx_workbook(workbook_bytes: bytes):
                     "Sheet": target,
                     "Status": f"Error: {sheet_err}",
                     "Rows Loaded": 0,
-                    "Date-Overdue Rows (All Statuses)": 0,
+                    "Overdue Rows ('P')": 0,
+                    "ETS Rows": 0,
                 }
             )
 
@@ -493,13 +485,13 @@ def parse_xlsx_workbook(workbook_bytes: bytes):
         if compiled_rows
         else pd.DataFrame()
     )
-    all_full_df = (
-        pd.concat(full_work_rows, ignore_index=True).fillna("")
-        if full_work_rows
+    overdue_full_df = (
+        pd.concat(full_overdue_rows, ignore_index=True).fillna("")
+        if full_overdue_rows
         else pd.DataFrame()
     )
     diag_df = pd.DataFrame(sheet_diagnostics)
-    return master_df, all_full_df, diag_df, today_ist.strftime("%d-%m-%Y")
+    return master_df, overdue_full_df, diag_df, today_ist.strftime("%d-%m-%Y")
 
 
 def save_shared_state(state: dict, data_tuple, source_label: str):
@@ -545,10 +537,19 @@ sync_clicked = st.sidebar.button(
     type="primary",
 )
 
+denominator_mode = st.sidebar.radio(
+    "Total Works Assigned Count Basis:",
+    options=[
+        "All Works Assigned (All Statuses)",
+        "Only Ongoing Works (Status = 'Progress')",
+    ],
+    index=0,
+)
+
 chart_style = st.sidebar.radio(
     "Bar Width Mode:",
     options=[
-        "Overlay (Overdue inside Total Works)",
+        "Overlay (Overdue + ETS + Rest of Works)",
         "Scale by Overdue Works (Full-Width Bars)",
         "Scale by Overdue Percentage (%)",
     ],
@@ -597,7 +598,7 @@ elif shared_state["data"] is None or sync_clicked:
                         )
                         st.stop()
 
-master_df, all_full_df, diag_df, today_str = shared_state["data"]
+master_df, overdue_full_df, diag_df, today_str = shared_state["data"]
 
 st.caption(
     f"⚡ **Data Source:** {shared_state['source_label']} &nbsp;|&nbsp; "
@@ -611,53 +612,9 @@ if master_df.empty:
     st.stop()
 
 # -----------------------------------------------------------------------------
-# BUILD DYNAMIC CP/CF STATUS OPTIONS & SMART MULTI-SELECT CALLBACK
+# TOP CONTROLS: OFFICER VIEW & SORT ORDER
 # -----------------------------------------------------------------------------
-detected_statuses = [
-    s
-    for s in master_df["status_norm"].dropna().unique().tolist()
-    if is_valid_status_token(s)
-]
-
-ordered_statuses = []
-for code in STANDARD_STATUS_CODES + sorted(detected_statuses):
-    if code not in ordered_statuses:
-        ordered_statuses.append(code)
-
-status_dropdown_options = ["ALL"] + ordered_statuses
-
-if "cp_cf_selected" not in st.session_state:
-    st.session_state["cp_cf_selected"] = ["P"]
-if "cp_cf_prev" not in st.session_state:
-    st.session_state["cp_cf_prev"] = list(st.session_state["cp_cf_selected"])
-
-
-def on_cp_cf_change():
-    """
-    Smart multi-select handler:
-    - If 'ALL' was active and user clicks 'ETH' -> automatically unselects 'ALL' and selects 'ETH'.
-    - If user selects multiple terms like 'P', 'CP' -> keeps both active.
-    - If user clicks 'ALL' while specific terms are active -> resets to ['ALL'].
-    - If user clears everything -> defaults back to ['ALL'].
-    """
-    current = st.session_state.get("cp_cf_selected", [])
-    prev = st.session_state.get("cp_cf_prev", ["ALL"])
-
-    if not current:
-        st.session_state["cp_cf_selected"] = ["ALL"]
-    elif "ALL" in current and len(current) > 1:
-        if "ALL" not in prev:
-            st.session_state["cp_cf_selected"] = ["ALL"]
-        else:
-            st.session_state["cp_cf_selected"] = [x for x in current if x != "ALL"]
-
-    st.session_state["cp_cf_prev"] = list(st.session_state["cp_cf_selected"])
-
-
-# -----------------------------------------------------------------------------
-# TOP CONTROLS: OFFICER VIEW, CP/CF STATUS DROPDOWN, & SORT ORDER
-# -----------------------------------------------------------------------------
-ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([1.3, 1.6, 1.4])
+ctrl_col1, ctrl_col2 = st.columns(2)
 
 with ctrl_col1:
     view_choice = st.radio(
@@ -667,15 +624,6 @@ with ctrl_col1:
     )
 
 with ctrl_col2:
-    selected_statuses = st.multiselect(
-        "CP/CF ಸ್ಥಿತಿ ಆಯ್ಕೆಮಾಡಿ / Filter by CP/CF Status (Select 'ALL', single e.g. 'ETH', or multiple e.g. 'P, CP'):",
-        options=status_dropdown_options,
-        key="cp_cf_selected",
-        on_change=on_cp_cf_change,
-        help="Select 'ALL' for all works, or pick one ('ETH', 'P') or multiple ('P', 'CP') statuses.",
-    )
-
-with ctrl_col3:
     sort_choice = st.radio(
         "ಕ್ರಮಬದ್ಧಗೊಳಿಸಿ / Sort Chart & Table By:",
         options=[
@@ -685,44 +633,29 @@ with ctrl_col3:
         horizontal=True,
     )
 
-# Also show the active status filter in the sidebar for convenience
-st.sidebar.markdown(
-    f"**Active CP/CF Filter:** `{', '.join(selected_statuses)}`"
-)
-
-is_all_statuses = ("ALL" in selected_statuses) or (len(selected_statuses) == 0)
-status_badge = "ALL Statuses" if is_all_statuses else ", ".join(selected_statuses)
-
 group_col = "so_name" if view_choice == COL_SO else "aee_name"
 full_filter_col = "_so_name" if view_choice == COL_SO else "_aee_name"
 
-# -----------------------------------------------------------------------------
-# APPLY CP/CF STATUS FILTER TO ALL VALUES (TOTAL WORKS, OVERDUE WORKS, %)
-# -----------------------------------------------------------------------------
 valid_df = master_df[master_df[group_col].map(is_valid_officer_name)].copy()
 
-if not is_all_statuses:
-    filtered_df = valid_df[valid_df["status_norm"].isin(selected_statuses)].copy()
-else:
-    filtered_df = valid_df.copy()
-
-# Overdue works within the selected CP/CF status(es)
-filtered_df["is_overdue"] = filtered_df["is_date_overdue"]
-
-if filtered_df.empty:
-    st.warning(
-        f"No works found matching CP/CF status: **{status_badge}**. Try selecting another status above."
-    )
-    st.stop()
+if denominator_mode.startswith("Only Ongoing Works"):
+    valid_df = valid_df[valid_df["is_status_p"]].copy()
 
 summary_df = (
-    filtered_df.groupby(group_col, as_index=False)
+    valid_df.groupby(group_col, as_index=False)
     .agg(
         total_works=("is_overdue", "count"),
+        ongoing_p_works=("is_status_p", "sum"),
+        ets_works=("is_status_ets", "sum"),
         overdue_works=("is_overdue", "sum"),
     )
     .rename(columns={group_col: view_choice})
 )
+
+# Calculate rest of works (grey segment) and overdue percentage
+summary_df["rest_works"] = (
+    summary_df["total_works"] - summary_df["overdue_works"] - summary_df["ets_works"]
+).clip(lower=0)
 
 summary_df["overdue_pct"] = (
     (summary_df["overdue_works"] / summary_df["total_works"]) * 100
@@ -744,6 +677,7 @@ else:
 # -----------------------------------------------------------------------------
 total_assigned_all = int(summary_df["total_works"].sum())
 total_overdue_all = int(summary_df["overdue_works"].sum())
+total_ets_all = int(summary_df["ets_works"].sum())
 overall_overdue_pct = (
     round((total_overdue_all / total_assigned_all) * 100, 1)
     if total_assigned_all > 0
@@ -752,22 +686,20 @@ overall_overdue_pct = (
 
 k1, k2, k3, k4, k5 = st.columns(5)
 k1.metric("📅 Comparison Date (Today)", today_str)
-k2.metric("🏷️ CP/CF Status Filter", status_badge)
-k3.metric(f"👥 Total Officers ({view_choice})", len(summary_df))
-k4.metric(f"📋 Total Works ({status_badge})", f"{total_assigned_all:,}")
-k5.metric(
-    f"⚠️ Overdue Works ({status_badge})",
+k2.metric(f"👥 Total Officers ({view_choice})", len(summary_df))
+k3.metric("📋 Total Works Assigned", f"{total_assigned_all:,}")
+k4.metric(
+    "🔴 Total Overdue Works ('P')",
     f"{total_overdue_all:,} ({overall_overdue_pct}%)",
 )
+k5.metric("🟢 Total 'ETS' Works", f"{total_ets_all:,}")
 
 st.divider()
 
 # -----------------------------------------------------------------------------
-# HORIZONTAL BAR CHART (FULL WIDTH & LEFT ALIGNED)
+# HORIZONTAL BAR CHART (RED = OVERDUE 'P', LIGHT GREEN = 'ETS', GREY = REST)
 # -----------------------------------------------------------------------------
-st.subheader(
-    f"📈 Overdue Works by {view_choice} — [CP/CF: {status_badge}] ({sort_choice})"
-)
+st.subheader(f"📈 Overdue & ETS Works by {view_choice} ({sort_choice})")
 
 chart_source_df = (
     summary_df[summary_df["overdue_works"] > 0].copy()
@@ -776,7 +708,7 @@ chart_source_df = (
 )
 
 if chart_source_df.empty:
-    st.info(f"No officers have overdue works > 0 for CP/CF status: {status_badge}.")
+    st.info("No officers match the current filter.")
 else:
     plot_df = chart_source_df.iloc[::-1].copy()
     plot_df["y_short"] = plot_df[view_choice].map(lambda s: shorten_label(s, 28))
@@ -785,14 +717,15 @@ else:
         plot_df["bar_label"] = plot_df.apply(
             lambda r: (
                 f"  <b>{r['overdue_pct']:.1f}% Overdue</b> "
-                f"({int(r['overdue_works'])} Overdue / {int(r['total_works'])} Total)"
+                f"({int(r['overdue_works'])} Overdue | {int(r['ets_works'])} ETS / {int(r['total_works'])} Total)"
             ),
             axis=1,
         )
     else:
         plot_df["bar_label"] = plot_df.apply(
             lambda r: (
-                f"  <b>{int(r['overdue_works'])} Overdue</b> / "
+                f"  <b>{int(r['overdue_works'])} Overdue</b> | "
+                f"<span style='color:#4ADE80'>{int(r['ets_works'])} ETS</span> / "
                 f"{int(r['total_works'])} Total ({r['overdue_pct']:.1f}%)"
             ),
             axis=1,
@@ -805,7 +738,7 @@ else:
             go.Bar(
                 y=plot_df[view_choice],
                 x=plot_df["overdue_works"],
-                name=f"Overdue Works ({status_badge})",
+                name="Overdue Works ('P')",
                 orientation="h",
                 marker=dict(
                     color="#EF4444",
@@ -816,27 +749,35 @@ else:
                 textfont=dict(size=13),
                 cliponaxis=False,
                 customdata=plot_df[
-                    [view_choice, "total_works", "overdue_pct"]
+                    [
+                        view_choice,
+                        "total_works",
+                        "ongoing_p_works",
+                        "ets_works",
+                        "rest_works",
+                        "overdue_pct",
+                    ]
                 ],
                 hovertemplate=(
                     f"<b>{view_choice}:</b> %{{customdata[0]}}<br>"
-                    f"<b>CP/CF Filter:</b> {status_badge}<br>"
-                    "<b>Overdue Works:</b> %{x}<br>"
-                    "<b>Total Works (Selected Status):</b> %{customdata[1]}<br>"
-                    "<b>Overdue Percentage:</b> %{customdata[2]:.1f}%<extra></extra>"
+                    "<b>Overdue Works ('P'):</b> %{x}<br>"
+                    "<b>ETS Works ('ETS'):</b> %{customdata[3]}<br>"
+                    "<b>Rest of Works:</b> %{customdata[4]}<br>"
+                    "<b>Total Works Assigned:</b> %{customdata[1]}<br>"
+                    "<b>Overdue Percentage:</b> %{customdata[5]:.1f}%<extra></extra>"
                 ),
             )
         )
         max_x = max(int(plot_df["overdue_works"].max()), 1)
-        x_range_max = max_x * 1.30
-        x_axis_title = f"Number of Overdue Works ({status_badge})"
+        x_range_max = max_x * 1.34
+        x_axis_title = "Number of Overdue Works"
 
     elif chart_style == "Scale by Overdue Percentage (%)":
         fig.add_trace(
             go.Bar(
                 y=plot_df[view_choice],
                 x=plot_df["overdue_pct"],
-                name=f"Overdue % ({status_badge})",
+                name="Overdue %",
                 orientation="h",
                 marker=dict(
                     color="#EF4444",
@@ -847,27 +788,41 @@ else:
                 textfont=dict(size=13),
                 cliponaxis=False,
                 customdata=plot_df[
-                    [view_choice, "total_works", "overdue_works"]
+                    [
+                        view_choice,
+                        "total_works",
+                        "ongoing_p_works",
+                        "overdue_works",
+                        "ets_works",
+                        "rest_works",
+                    ]
                 ],
                 hovertemplate=(
                     f"<b>{view_choice}:</b> %{{customdata[0]}}<br>"
-                    f"<b>CP/CF Filter:</b> {status_badge}<br>"
                     "<b>Overdue Percentage:</b> %{x:.1f}%<br>"
-                    "<b>Overdue Works:</b> %{customdata[2]}<br>"
-                    "<b>Total Works (Selected Status):</b> %{customdata[1]}<extra></extra>"
+                    "<b>Overdue Works ('P'):</b> %{customdata[3]}<br>"
+                    "<b>ETS Works ('ETS'):</b> %{customdata[4]}<br>"
+                    "<b>Rest of Works:</b> %{customdata[5]}<br>"
+                    "<b>Total Works Assigned:</b> %{customdata[1]}<extra></extra>"
                 ),
             )
         )
         max_x = max(float(plot_df["overdue_pct"].max()), 1.0)
-        x_range_max = max_x * 1.30
-        x_axis_title = f"Overdue Percentage (%) — [{status_badge}]"
+        x_range_max = max_x * 1.34
+        x_axis_title = "Overdue Percentage (%)"
 
     else:
+        # Cumulative overlay:
+        # 1. Grey bar = Full length (Total Works) -> visible part is Rest of Works
+        # 2. Light Green bar = Overdue + ETS -> visible part right after Red is ETS Works
+        # 3. Red bar = Overdue Works -> visible part at the start is Overdue ('P')
+        plot_df["overdue_plus_ets"] = plot_df["overdue_works"] + plot_df["ets_works"]
+
         fig.add_trace(
             go.Bar(
                 y=plot_df[view_choice],
                 x=plot_df["total_works"],
-                name=f"Total Works ({status_badge})",
+                name="Rest of Works (Other Statuses)",
                 orientation="h",
                 marker=dict(
                     color="rgba(148, 163, 184, 0.30)",
@@ -877,36 +832,86 @@ else:
                 textposition="outside",
                 textfont=dict(size=13),
                 cliponaxis=False,
-                customdata=plot_df[[view_choice]],
+                customdata=plot_df[
+                    [
+                        view_choice,
+                        "total_works",
+                        "overdue_works",
+                        "ets_works",
+                        "rest_works",
+                        "overdue_pct",
+                    ]
+                ],
                 hovertemplate=(
                     f"<b>{view_choice}:</b> %{{customdata[0]}}<br>"
-                    f"<b>CP/CF Filter:</b> {status_badge}<br>"
-                    "<b>Total Works:</b> %{x}<extra></extra>"
+                    "<b>Total Works Assigned:</b> %{customdata[1]}<br>"
+                    "<b>Overdue Works ('P'):</b> %{customdata[2]}<br>"
+                    "<b>ETS Works ('ETS'):</b> %{customdata[3]}<br>"
+                    "<b>Rest of Works:</b> %{customdata[4]}<br>"
+                    "<b>Overdue Percentage:</b> %{customdata[5]:.1f}%<extra></extra>"
                 ),
             )
         )
+
+        fig.add_trace(
+            go.Bar(
+                y=plot_df[view_choice],
+                x=plot_df["overdue_plus_ets"],
+                name="ETS Works ('ETS')",
+                orientation="h",
+                marker=dict(color="#4ADE80"),
+                customdata=plot_df[
+                    [
+                        view_choice,
+                        "total_works",
+                        "overdue_works",
+                        "ets_works",
+                        "rest_works",
+                        "overdue_pct",
+                    ]
+                ],
+                hovertemplate=(
+                    f"<b>{view_choice}:</b> %{{customdata[0]}}<br>"
+                    "<b>ETS Works ('ETS'):</b> %{customdata[3]}<br>"
+                    "<b>Overdue Works ('P'):</b> %{customdata[2]}<br>"
+                    "<b>Rest of Works:</b> %{customdata[4]}<br>"
+                    "<b>Total Works Assigned:</b> %{customdata[1]}<br>"
+                    "<b>Overdue Percentage:</b> %{customdata[5]:.1f}%<extra></extra>"
+                ),
+            )
+        )
+
         fig.add_trace(
             go.Bar(
                 y=plot_df[view_choice],
                 x=plot_df["overdue_works"],
-                name=f"Overdue Works ({status_badge})",
+                name="Overdue Works ('P')",
                 orientation="h",
                 marker=dict(color="#EF4444"),
                 customdata=plot_df[
-                    [view_choice, "total_works", "overdue_pct"]
+                    [
+                        view_choice,
+                        "total_works",
+                        "ongoing_p_works",
+                        "overdue_pct",
+                        "ets_works",
+                        "rest_works",
+                    ]
                 ],
                 hovertemplate=(
                     f"<b>{view_choice}:</b> %{{customdata[0]}}<br>"
-                    f"<b>CP/CF Filter:</b> {status_badge}<br>"
-                    "<b>Overdue Works:</b> %{x}<br>"
-                    "<b>Total Works (Selected Status):</b> %{customdata[1]}<br>"
-                    "<b>Overdue Percentage:</b> %{customdata[2]:.1f}%<extra></extra>"
+                    "<b>Overdue Works ('P'):</b> %{x}<br>"
+                    "<b>ETS Works ('ETS'):</b> %{customdata[4]}<br>"
+                    "<b>Rest of Works:</b> %{customdata[5]}<br>"
+                    "<b>Total Works Assigned:</b> %{customdata[1]}<br>"
+                    "<b>Overdue Percentage:</b> %{customdata[3]:.1f}%<extra></extra>"
                 ),
             )
         )
+
         max_x = max(int(plot_df["total_works"].max()), 1)
-        x_range_max = max_x * 1.32
-        x_axis_title = f"Number of Works ({status_badge})"
+        x_range_max = max_x * 1.36
+        x_axis_title = "Number of Works"
 
     chart_height = max(500, len(plot_df) * 36 + 90)
 
@@ -934,6 +939,7 @@ else:
             y=1.01,
             xanchor="left",
             x=0,
+            traceorder="reversed",
         ),
         margin=dict(l=210, r=40, t=40, b=40),
     )
@@ -943,14 +949,25 @@ else:
 # -----------------------------------------------------------------------------
 # DETAILED SUMMARY TABLE
 # -----------------------------------------------------------------------------
-st.subheader(f"📋 Officer-Wise Summary Table — [CP/CF: {status_badge}]")
+st.subheader("📋 Officer-Wise Summary Table")
 
-display_table = summary_df.copy()
-display_table.insert(1, "CP/CF Filter", status_badge)
-display_table = display_table.rename(
+display_table = summary_df[
+    [
+        view_choice,
+        "total_works",
+        "overdue_works",
+        "ets_works",
+        "rest_works",
+        "ongoing_p_works",
+        "overdue_pct",
+    ]
+].rename(
     columns={
-        "total_works": f"Total Works ({status_badge})",
-        "overdue_works": f"Overdue Works ({status_badge})",
+        "total_works": "Total Works Assigned",
+        "overdue_works": "Overdue Works ('P')",
+        "ets_works": "ETS Works ('ETS')",
+        "rest_works": "Rest of Works",
+        "ongoing_p_works": "Ongoing Works ('P')",
         "overdue_pct": "Overdue %",
     }
 )
@@ -964,10 +981,10 @@ st.dataframe(
 st.divider()
 
 # -----------------------------------------------------------------------------
-# BOTTOM SECTION: OFFICER DROPDOWN & COMBINED WORKS TABLE + DOWNLOAD
+# BOTTOM SECTION: OFFICER DROPDOWN & COMBINED OVERDUE WORKS TABLE + DOWNLOAD
 # -----------------------------------------------------------------------------
 st.subheader(
-    f"📂 ಅಧಿಕಾರಿಗಳ ವಾರು ಕಾಮಗಾರಿಗಳ ವಿವರ / Combined Works by {view_choice} — [CP/CF: {status_badge}]"
+    f"📂 ಅಧಿಕಾರಿಗಳ ವಾರು ಅವಧಿ ಮೀರಿದ ಕಾಮಗಾರಿಗಳ ವಿವರ / Combined Overdue Works by {view_choice}"
 )
 
 officer_options = summary_df[view_choice].tolist()
@@ -975,94 +992,69 @@ officer_options = summary_df[view_choice].tolist()
 officer_stats_map = {
     row[view_choice]: (
         int(row["overdue_works"]),
+        int(row["ets_works"]),
         int(row["total_works"]),
         float(row["overdue_pct"]),
     )
     for _, row in summary_df.iterrows()
 }
 
-b_col1, b_col2 = st.columns([2.2, 1.3])
-
-with b_col1:
-    selected_officer = st.selectbox(
-        f"Select {view_choice} (Filtered by CP/CF: {status_badge}):",
-        options=officer_options,
-        index=0 if officer_options else None,
-        format_func=lambda name: (
-            f"{name}  —  ({officer_stats_map[name][0]} Overdue / "
-            f"{officer_stats_map[name][1]} Total in [{status_badge}] | {officer_stats_map[name][2]:.1f}%)"
-        ),
-    )
-
-with b_col2:
-    table_row_mode = st.radio(
-        "Rows to Display & Download:",
-        options=[
-            "Overdue Works Only",
-            "All Works (for Selected Status)",
-        ],
-        horizontal=True,
-    )
+selected_officer = st.selectbox(
+    f"Select {view_choice} to view and download all their Overdue Works across all worksheets:",
+    options=officer_options,
+    index=0 if officer_options else None,
+    format_func=lambda name: (
+        f"{name}  —  ({officer_stats_map[name][0]} Overdue | "
+        f"{officer_stats_map[name][1]} ETS / "
+        f"{officer_stats_map[name][2]} Total | {officer_stats_map[name][3]:.1f}%)"
+    ),
+)
 
 if selected_officer:
-    if all_full_df.empty:
-        st.info("No work rows found across the 23 worksheets.")
+    if overdue_full_df.empty:
+        st.info("No overdue works found across the 23 worksheets.")
     else:
-        officer_df = all_full_df[
-            all_full_df[full_filter_col] == selected_officer
+        officer_overdue_df = overdue_full_df[
+            overdue_full_df[full_filter_col] == selected_officer
         ].copy()
 
-        if not is_all_statuses:
-            officer_df = officer_df[
-                officer_df["_status_norm"].isin(selected_statuses)
-            ].copy()
-
-        if table_row_mode == "Overdue Works Only":
-            officer_df = officer_df[officer_df["_is_date_overdue"]].copy()
-
         internal_cols = [
-            c
-            for c in ["_so_name", "_aee_name", "_status_norm", "_is_date_overdue"]
-            if c in officer_df.columns
+            c for c in ["_so_name", "_aee_name"] if c in officer_overdue_df.columns
         ]
-        officer_df.drop(columns=internal_cols, inplace=True)
+        officer_overdue_df.drop(columns=internal_cols, inplace=True)
 
         extra_unnamed = [
             c
-            for c in officer_df.columns
-            if c.startswith("Unnamed_Col_") and officer_df[c].eq("").all()
+            for c in officer_overdue_df.columns
+            if c.startswith("Unnamed_Col_") and officer_overdue_df[c].eq("").all()
         ]
         if extra_unnamed:
-            officer_df.drop(columns=extra_unnamed, inplace=True)
+            officer_overdue_df.drop(columns=extra_unnamed, inplace=True)
 
-        officer_df = officer_df.reset_index(drop=True)
-        officer_df.index = officer_df.index + 1
-        officer_df.index.name = "Sl. No."
+        officer_overdue_df = officer_overdue_df.reset_index(drop=True)
+        officer_overdue_df.index = officer_overdue_df.index + 1
+        officer_overdue_df.index.name = "Sl. No."
 
-        if officer_df.empty:
-            st.success(
-                f"🎉 **{selected_officer}** has **0** {table_row_mode.lower()} under CP/CF status **{status_badge}**!"
-            )
+        if officer_overdue_df.empty:
+            st.success(f"🎉 **{selected_officer}** has **0** overdue works!")
         else:
-            sheets_involved = officer_df["Worksheet / ಯೋಜನೆ"].unique().tolist()
+            sheets_involved = officer_overdue_df["Worksheet / ಯೋಜನೆ"].unique().tolist()
             st.markdown(
                 f"**Selected {view_choice}:** `{selected_officer}` &nbsp;|&nbsp; "
-                f"**CP/CF Filter:** `{status_badge}` &nbsp;|&nbsp; "
-                f"**Rows Shown ({table_row_mode}):** `{len(officer_df)}` &nbsp;|&nbsp; "
+                f"**Total Overdue Works:** `{len(officer_overdue_df)}` &nbsp;|&nbsp; "
                 f"**Worksheets:** `{', '.join(sheets_involved)}`"
             )
 
             safe_name = re.sub(r"[^\w\-]+", "_", selected_officer).strip("_") or "Officer"
-            safe_status = re.sub(r"[^\w\-]+", "_", status_badge).strip("_") or "ALL"
-            excel_bytes = convert_df_to_excel_bytes(officer_df.reset_index())
-            csv_bytes = officer_df.reset_index().to_csv(index=False).encode("utf-8-sig")
+            excel_bytes = convert_df_to_excel_bytes(officer_overdue_df.reset_index())
+            csv_bytes = officer_overdue_df.reset_index().to_csv(index=False).encode("utf-8-sig")
 
             dl_col1, dl_col2, _ = st.columns([1.5, 1.5, 5])
             with dl_col1:
                 st.download_button(
                     label="📥 Download Excel (.xlsx)",
                     data=excel_bytes,
-                    file_name=f"Works_{safe_name}_{safe_status}_{today_str}.xlsx",
+                    file_name=f"Overdue_Works_{safe_name}_{today_str}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
                 )
@@ -1070,15 +1062,15 @@ if selected_officer:
                 st.download_button(
                     label="📥 Download CSV (.csv)",
                     data=csv_bytes,
-                    file_name=f"Works_{safe_name}_{safe_status}_{today_str}.csv",
+                    file_name=f"Overdue_Works_{safe_name}_{today_str}.csv",
                     mime="text/csv",
                     use_container_width=True,
                 )
 
             st.dataframe(
-                officer_df,
+                officer_overdue_df,
                 use_container_width=True,
-                height=min(600, max(220, (len(officer_df) + 1) * 42)),
+                height=min(600, max(220, (len(officer_overdue_df) + 1) * 42)),
             )
 
 with st.expander("🔍 Inspect Worksheet Loading Status (23 Target Sheets)"):
