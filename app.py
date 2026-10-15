@@ -22,23 +22,27 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# Mobile-first Portrait CSS (2x2 KPI cards, tight padding, thumb-friendly UI)
+# Mobile-first Portrait CSS (with top padding fix so the title is never clipped)
 st.markdown(
     """
     <style>
+        header[data-testid="stHeader"] {
+            background: transparent !important;
+        }
         .block-container {
             max-width: 680px !important;
             padding-left: 0.65rem !important;
             padding-right: 0.65rem !important;
-            padding-top: 1.8rem !important;
+            padding-top: 3.8rem !important;
             padding-bottom: 2.5rem !important;
         }
         /* Compact Title for Mobile */
         .mobile-title {
             font-size: 1.25rem;
             font-weight: 800;
-            line-height: 1.3;
-            margin-bottom: 0.2rem;
+            line-height: 1.35;
+            margin-top: 0.2rem;
+            margin-bottom: 0.25rem;
         }
         .mobile-subtitle {
             font-size: 0.78rem;
