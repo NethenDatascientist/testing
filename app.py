@@ -13,24 +13,93 @@ import requests
 import streamlit as st
 
 # -----------------------------------------------------------------------------
-# PAGE CONFIGURATION
+# PAGE CONFIGURATION (MOBILE PORTRAIT OPTIMIZED)
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="Overdue Works Dashboard",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded",
+    page_title="MI Overdue Works — CE Mobile View",
+    page_icon="📱",
+    layout="centered",
+    initial_sidebar_state="collapsed",
 )
 
+# Mobile-first Portrait CSS (2x2 KPI cards, tight padding, thumb-friendly UI)
 st.markdown(
     """
     <style>
         .block-container {
-            max-width: 100% !important;
-            padding-left: 1.2rem !important;
-            padding-right: 1.2rem !important;
-            padding-top: 2.8rem !important;
-            padding-bottom: 2rem !important;
+            max-width: 680px !important;
+            padding-left: 0.65rem !important;
+            padding-right: 0.65rem !important;
+            padding-top: 1.8rem !important;
+            padding-bottom: 2.5rem !important;
+        }
+        /* Compact Title for Mobile */
+        .mobile-title {
+            font-size: 1.25rem;
+            font-weight: 800;
+            line-height: 1.3;
+            margin-bottom: 0.2rem;
+        }
+        .mobile-subtitle {
+            font-size: 0.78rem;
+            opacity: 0.75;
+            margin-bottom: 0.75rem;
+        }
+        /* 2x2 Responsive KPI Grid for Portrait Phones */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 6px;
+            margin-bottom: 12px;
+        }
+        .kpi-card {
+            background: rgba(148, 163, 184, 0.10);
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            border-radius: 10px;
+            padding: 10px 12px;
+        }
+        .kpi-card-red {
+            background: rgba(239, 68, 68, 0.14);
+            border: 1px solid rgba(239, 68, 68, 0.45);
+            border-radius: 10px;
+            padding: 10px 12px;
+        }
+        .kpi-card-green {
+            background: rgba(74, 222, 128, 0.12);
+            border: 1px solid rgba(74, 222, 128, 0.40);
+            border-radius: 10px;
+            padding: 10px 12px;
+        }
+        .kpi-label {
+            font-size: 0.74rem;
+            font-weight: 600;
+            opacity: 0.85;
+            margin-bottom: 2px;
+        }
+        .kpi-val {
+            font-size: 1.22rem;
+            font-weight: 800;
+            line-height: 1.2;
+        }
+        /* Legend pill bar */
+        .legend-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            margin: 6px 0 4px 0;
+            padding: 6px 10px;
+            background: rgba(148, 163, 184, 0.08);
+            border-radius: 8px;
+        }
+        .dot-red { color: #EF4444; }
+        .dot-green { color: #4ADE80; }
+        .dot-grey { color: #94A3B8; }
+        /* Make radio & select widgets easier to tap on mobile */
+        div[role="radiogroup"] {
+            gap: 0.4rem !important;
         }
         [data-testid="stPlotlyChart"] {
             width: 100% !important;
@@ -84,14 +153,10 @@ DISK_BACKUP_FILE = "/tmp/mi_overdue_shared_snapshot_v3.pkl"
 
 
 # -----------------------------------------------------------------------------
-# SHARED SERVER MEMORY & LOCK (Prevents 410 Gone when multiple screens connect)
+# SHARED SERVER MEMORY & LOCK (Instant load on CE's phone)
 # -----------------------------------------------------------------------------
 @st.cache_resource
 def get_shared_state() -> dict:
-    """
-    Shared across ALL browser sessions/screens connected to this Streamlit app.
-    Ensures only one download happens at a time and all screens share the data.
-    """
     state = {
         "lock": threading.Lock(),
         "data": None,
@@ -114,14 +179,12 @@ def get_shared_state() -> dict:
 # HELPER FUNCTIONS
 # -----------------------------------------------------------------------------
 def normalize_text(val) -> str:
-    """Collapse multiple spaces/newlines and strip text."""
     if val is None or pd.isna(val):
         return ""
     return re.sub(r"\s+", " ", str(val)).strip()
 
 
 def format_cell_for_display(val) -> str:
-    """Format raw Excel cell values cleanly for table display and export."""
     if val is None or pd.isna(val):
         return ""
     if isinstance(val, (datetime, pd.Timestamp)):
@@ -132,15 +195,13 @@ def format_cell_for_display(val) -> str:
 
 
 def extract_spreadsheet_key(sheet_url: str) -> str:
-    """Extract the Google Spreadsheet ID from the URL."""
     match = re.search(r"/spreadsheets/d/([a-zA-Z0-9-_]+)", sheet_url)
     if not match:
-        raise ValueError("Invalid Google Sheet URL. Could not extract spreadsheet key.")
+        raise ValueError("Invalid Google Sheet URL.")
     return match.group(1)
 
 
 def download_xlsx_bytes(sheet_url: str) -> bytes:
-    """Download the Google Sheet as .xlsx with retry logic and browser headers."""
     key = extract_spreadsheet_key(sheet_url)
     urls = [
         f"https://docs.google.com/spreadsheets/d/{key}/export?format=xlsx",
@@ -148,9 +209,9 @@ def download_xlsx_bytes(sheet_url: str) -> bytes:
     ]
     headers = {
         "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "Mozilla/5.0 (Linux; Android 14; Pixel 8) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/128.0.0.0 Safari/537.36"
+            "Chrome/128.0.0.0 Mobile Safari/537.36"
         ),
     }
 
@@ -172,7 +233,6 @@ def download_xlsx_bytes(sheet_url: str) -> bytes:
 
 
 def find_matching_column_indices(headers: list[str]) -> dict:
-    """Find required 0-based column positions across sheets."""
     col_idx_map = {}
     for idx, col in enumerate(headers):
         norm_col = normalize_text(col)
@@ -202,7 +262,6 @@ def find_matching_column_indices(headers: list[str]) -> dict:
 
 
 def build_clean_unique_headers(raw_headers: list[str], col_idx_map: dict) -> list[str]:
-    """Standardize key column names across sheets and deduplicate repeated headers."""
     standardized = list(raw_headers)
     if "so" in col_idx_map:
         standardized[col_idx_map["so"]] = COL_SO
@@ -229,7 +288,6 @@ def build_clean_unique_headers(raw_headers: list[str], col_idx_map: dict) -> lis
 
 
 def parse_indian_date(series: pd.Series) -> pd.Series:
-    """Safely parse dates (handling datetime objects and DD-MM-YYYY / DD.MM.YYYY strings)."""
     def _clean_date(val):
         if val is None or pd.isna(val):
             return pd.NaT
@@ -246,7 +304,6 @@ def parse_indian_date(series: pd.Series) -> pd.Series:
 
 
 def is_empty_date(series: pd.Series) -> pd.Series:
-    """Check if the 'ಮುಕ್ತಾಯವಾದ ದಿನಾಂಕ' cell is empty or placeholder text."""
     def _check_empty(val):
         if val is None or pd.isna(val):
             return True
@@ -257,7 +314,6 @@ def is_empty_date(series: pd.Series) -> pd.Series:
 
 
 def is_valid_officer_name(name: str) -> bool:
-    """Filter out empty cells, serial numbers, or summary rows like 'ಒಟ್ಟು' / 'Total'."""
     if not name or len(name) > 65:
         return False
     upper = name.upper()
@@ -271,13 +327,13 @@ def is_valid_officer_name(name: str) -> bool:
     return True
 
 
-def shorten_label(name: str, max_len: int = 26) -> str:
-    """Keep Y-axis labels compact so the chart always starts on the far left."""
-    return name if len(name) <= max_len else name[: max_len - 1] + "…"
+def shorten_mobile_label(name: str, max_len: int = 16) -> str:
+    """Shorten Y-axis officer names on portrait phones so bars have maximum width."""
+    clean = re.sub(r"^(ಶ್ರೀ|ಶ್ರೀಮತಿ|ಕುಮಾರಿ)\.?\s*", "", name).strip()
+    return clean if len(clean) <= max_len else clean[: max_len - 1] + "…"
 
 
 def convert_df_to_excel_bytes(df: pd.DataFrame) -> bytes:
-    """Export a DataFrame to an in-memory .xlsx file."""
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="Overdue_Works")
@@ -285,10 +341,6 @@ def convert_df_to_excel_bytes(df: pd.DataFrame) -> bytes:
 
 
 def parse_xlsx_workbook(workbook_bytes: bytes):
-    """
-    Parse the 23 target worksheets using pd.ExcelFile + pd.read_excel
-    (automatically uses fast Rust 'calamine' engine if installed, else 'openpyxl').
-    """
     progress = st.progress(0, text="Opening workbook...")
 
     try:
@@ -310,7 +362,7 @@ def parse_xlsx_workbook(workbook_bytes: bytes):
     for idx_sheet, target in enumerate(TARGET_SHEETS, start=1):
         progress.progress(
             idx_sheet / total_targets,
-            text=f"Processing worksheet {idx_sheet}/{total_targets}: {target}...",
+            text=f"Reading {idx_sheet}/{total_targets}: {target}...",
         )
 
         norm_target = normalize_text(target).lower()
@@ -320,10 +372,10 @@ def parse_xlsx_workbook(workbook_bytes: bytes):
             sheet_diagnostics.append(
                 {
                     "Sheet": target,
-                    "Status": "Missing in Workbook",
-                    "Rows Loaded": 0,
-                    "Overdue Rows ('P')": 0,
-                    "ETS Rows": 0,
+                    "Status": "Missing",
+                    "Rows": 0,
+                    "Overdue ('P')": 0,
+                    "ETS": 0,
                 }
             )
             continue
@@ -331,15 +383,6 @@ def parse_xlsx_workbook(workbook_bytes: bytes):
         try:
             raw_df = pd.read_excel(excel_file, sheet_name=actual_sheet_name, header=None)
             if raw_df.empty:
-                sheet_diagnostics.append(
-                    {
-                        "Sheet": target,
-                        "Status": "Empty Sheet",
-                        "Rows Loaded": 0,
-                        "Overdue Rows ('P')": 0,
-                        "ETS Rows": 0,
-                    }
-                )
                 continue
 
             header_idx = None
@@ -354,15 +397,6 @@ def parse_xlsx_workbook(workbook_bytes: bytes):
                     break
 
             if header_idx is None:
-                sheet_diagnostics.append(
-                    {
-                        "Sheet": target,
-                        "Status": "Header Row Not Found",
-                        "Rows Loaded": 0,
-                        "Overdue Rows ('P')": 0,
-                        "ETS Rows": 0,
-                    }
-                )
                 continue
 
             raw_headers = [normalize_text(col) for col in raw_df.iloc[header_idx].values]
@@ -379,17 +413,7 @@ def parse_xlsx_workbook(workbook_bytes: bytes):
                     raw_headers = combined_headers
                     col_idx_map = alt_map
 
-            missing_keys = required_keys - set(col_idx_map.keys())
-            if missing_keys:
-                sheet_diagnostics.append(
-                    {
-                        "Sheet": target,
-                        "Status": f"Missing Columns: {', '.join(sorted(missing_keys))}",
-                        "Rows Loaded": 0,
-                        "Overdue Rows ('P')": 0,
-                        "ETS Rows": 0,
-                    }
-                )
+            if required_keys - set(col_idx_map.keys()):
                 continue
 
             df = raw_df.iloc[header_idx + 1 :].reset_index(drop=True).copy()
@@ -407,7 +431,6 @@ def parse_xlsx_workbook(workbook_bytes: bytes):
             is_status_p = s_status_upper == "P"
             is_status_ets = s_status_upper == "ETS"
 
-            # Overdue Logic: Status is 'P'/'p', target date < Today, actual completion date is empty
             is_overdue = (
                 is_status_p
                 & target_dt.notna()
@@ -461,9 +484,9 @@ def parse_xlsx_workbook(workbook_bytes: bytes):
                 {
                     "Sheet": target,
                     "Status": "Loaded",
-                    "Rows Loaded": len(sub),
-                    "Overdue Rows ('P')": int(overdue_mask.sum()),
-                    "ETS Rows": int((valid_row_mask & is_status_ets).sum()),
+                    "Rows": len(sub),
+                    "Overdue ('P')": int(overdue_mask.sum()),
+                    "ETS": int((valid_row_mask & is_status_ets).sum()),
                 }
             )
 
@@ -472,9 +495,9 @@ def parse_xlsx_workbook(workbook_bytes: bytes):
                 {
                     "Sheet": target,
                     "Status": f"Error: {sheet_err}",
-                    "Rows Loaded": 0,
-                    "Overdue Rows ('P')": 0,
-                    "ETS Rows": 0,
+                    "Rows": 0,
+                    "Overdue ('P')": 0,
+                    "ETS": 0,
                 }
             )
 
@@ -495,8 +518,7 @@ def parse_xlsx_workbook(workbook_bytes: bytes):
 
 
 def save_shared_state(state: dict, data_tuple, source_label: str):
-    """Save parsed dataset in shared RAM and on local disk."""
-    now_str = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%d-%m-%Y %I:%M:%S %p")
+    now_str = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%d-%m-%Y %I:%M %p")
     state["data"] = data_tuple
     state["last_synced"] = now_str
     state["source_label"] = source_label
@@ -515,131 +537,75 @@ def save_shared_state(state: dict, data_tuple, source_label: str):
 
 
 # -----------------------------------------------------------------------------
-# SIDEBAR CONTROLS
+# MOBILE HEADER & DATA LOAD
 # -----------------------------------------------------------------------------
-st.sidebar.header("⚙️ Dashboard Controls")
-
-sheet_url_input = st.sidebar.text_input(
-    "Google Spreadsheet Link",
-    value=DEFAULT_SHEET_URL,
-    help="Ensure the Google Sheet is set to 'Anyone with the link can view'.",
+st.markdown(
+    '<div class="mobile-title">📊 Minor Irrigation — Overdue Works</div>',
+    unsafe_allow_html=True,
 )
-
-uploaded_xlsx = st.sidebar.file_uploader(
-    "Or Upload Workbook (.xlsx) Directly",
-    type=["xlsx"],
-    help="Optional: Upload a downloaded .xlsx copy to update all screens immediately.",
-)
-
-sync_clicked = st.sidebar.button(
-    "🔄 Sync Latest Data from Google Sheets",
-    use_container_width=True,
-    type="primary",
-)
-
-denominator_mode = st.sidebar.radio(
-    "Total Works Assigned Count Basis:",
-    options=[
-        "All Works Assigned (All Statuses)",
-        "Only Ongoing Works (Status = 'Progress')",
-    ],
-    index=0,
-)
-
-chart_style = st.sidebar.radio(
-    "Bar Width Mode:",
-    options=[
-        "Overlay (Overdue + ETS + Rest of Works)",
-        "Scale by Overdue Works (Full-Width Bars)",
-        "Scale by Overdue Percentage (%)",
-    ],
-    index=0,
-    help="Choose how the horizontal bars are scaled across the page.",
-)
-
-hide_zero_overdue = st.sidebar.checkbox(
-    "Show only officers with Overdue > 0",
-    value=False,
-)
-
-# -----------------------------------------------------------------------------
-# MAIN UI & THREAD-SAFE DATA LOADING
-# -----------------------------------------------------------------------------
-st.title("📊 Minor Irrigation — Overdue Works Dashboard")
 
 shared_state = get_shared_state()
 
-if uploaded_xlsx is not None:
-    file_id = f"{uploaded_xlsx.name}_{uploaded_xlsx.size}"
-    if st.session_state.get("_last_uploaded_id") != file_id:
-        with shared_state["lock"]:
-            parsed = parse_xlsx_workbook(uploaded_xlsx.getvalue())
-            save_shared_state(shared_state, parsed, f"Uploaded File ({uploaded_xlsx.name})")
-            st.session_state["_last_uploaded_id"] = file_id
-
-elif shared_state["data"] is None or sync_clicked:
+if shared_state["data"] is None:
     with shared_state["lock"]:
-        if shared_state["data"] is None or sync_clicked:
-            with st.spinner("Downloading workbook snapshot from Google Sheets (takes ~15-20s)..."):
+        if shared_state["data"] is None:
+            with st.spinner("Loading 23 worksheets from Google Sheets..."):
                 try:
-                    xlsx_bytes = download_xlsx_bytes(sheet_url_input)
+                    xlsx_bytes = download_xlsx_bytes(DEFAULT_SHEET_URL)
                     parsed = parse_xlsx_workbook(xlsx_bytes)
-                    save_shared_state(shared_state, parsed, "Google Sheets Live Snapshot")
+                    save_shared_state(shared_state, parsed, "Live Google Sheet")
                 except Exception as e:
-                    if shared_state["data"] is not None:
-                        st.warning(
-                            f"Google Sheets is busy right now ({e}). Showing last synced snapshot from {shared_state['last_synced']}."
-                        )
-                    else:
-                        st.error(
-                            f"Could not download from Google Sheets right now.\n\n"
-                            f"**Tip:** Wait 10 seconds and click **Sync Latest Data**, or upload the `.xlsx` file in the sidebar.\n\n"
-                            f"Details: {e}"
-                        )
-                        st.stop()
+                    st.error(f"Unable to load data right now. Please tap Refresh. ({e})")
+                    st.stop()
 
 master_df, overdue_full_df, diag_df, today_str = shared_state["data"]
 
-st.caption(
-    f"⚡ **Data Source:** {shared_state['source_label']} &nbsp;|&nbsp; "
-    f"**Last Synced:** {shared_state['last_synced']} IST &nbsp;|&nbsp; "
-    f"*(Cached in shared memory — TV & secondary screens load instantaneously)*"
+st.markdown(
+    f'<div class="mobile-subtitle">📅 Today: <b>{today_str}</b> &nbsp;|&nbsp; '
+    f'🔄 Synced: {shared_state["last_synced"]}</div>',
+    unsafe_allow_html=True,
 )
 
 if master_df.empty:
-    st.warning("No matching data rows were found across the target worksheets.")
-    st.dataframe(diag_df, use_container_width=True)
+    st.warning("No matching data rows found.")
     st.stop()
 
 # -----------------------------------------------------------------------------
-# TOP CONTROLS: OFFICER VIEW & SORT ORDER
+# TOUCH-FRIENDLY TOP CONTROLS FOR CHIEF ENGINEER
 # -----------------------------------------------------------------------------
-ctrl_col1, ctrl_col2 = st.columns(2)
+view_choice = st.radio(
+    "👤 ವೀಕ್ಷಣೆ ಆಯ್ಕೆಮಾಡಿ / Select Officer Level:",
+    options=[COL_SO, COL_AEE],
+    horizontal=True,
+)
 
-with ctrl_col1:
-    view_choice = st.radio(
-        "ವೀಕ್ಷಣೆ ಆಯ್ಕೆಮಾಡಿ / Select Officer View:",
-        options=[COL_SO, COL_AEE],
+c1, c2 = st.columns([1.2, 1])
+with c1:
+    sort_choice = st.radio(
+        "⬇️ Sort Ranking By:",
+        options=[
+            "Highest Overdue Count",
+            "Highest Overdue %",
+        ],
         horizontal=True,
     )
 
-with ctrl_col2:
-    sort_choice = st.radio(
-        "ಕ್ರಮಬದ್ಧಗೊಳಿಸಿ / Sort Chart & Table By:",
+with c2:
+    filter_mode = st.selectbox(
+        "🔍 Show Officers:",
         options=[
-            "Highest Overdue Count at Top",
-            "Highest Overdue Percentage (%) at Top",
+            "Overdue > 0 Only",
+            "Top 20 Officers",
+            "Top 35 Officers",
+            "All Officers",
         ],
-        horizontal=True,
+        index=0,
     )
 
 group_col = "so_name" if view_choice == COL_SO else "aee_name"
 full_filter_col = "_so_name" if view_choice == COL_SO else "_aee_name"
 
 valid_df = master_df[master_df[group_col].map(is_valid_officer_name)].copy()
-
-if denominator_mode.startswith("Only Ongoing Works"):
-    valid_df = valid_df[valid_df["is_status_p"]].copy()
 
 summary_df = (
     valid_df.groupby(group_col, as_index=False)
@@ -652,7 +618,6 @@ summary_df = (
     .rename(columns={group_col: view_choice})
 )
 
-# Calculate rest of works (grey segment) and overdue percentage
 summary_df["rest_works"] = (
     summary_df["total_works"] - summary_df["overdue_works"] - summary_df["ets_works"]
 ).clip(lower=0)
@@ -661,7 +626,7 @@ summary_df["overdue_pct"] = (
     (summary_df["overdue_works"] / summary_df["total_works"]) * 100
 ).round(1).fillna(0.0)
 
-if sort_choice == "Highest Overdue Percentage (%) at Top":
+if sort_choice == "Highest Overdue %":
     summary_df = summary_df.sort_values(
         by=["overdue_pct", "overdue_works", "total_works"],
         ascending=[False, False, False],
@@ -673,7 +638,7 @@ else:
     ).reset_index(drop=True)
 
 # -----------------------------------------------------------------------------
-# KPI SUMMARY METRICS
+# 2x2 MOBILE PORTRAIT KPI GRID
 # -----------------------------------------------------------------------------
 total_assigned_all = int(summary_df["total_works"].sum())
 total_overdue_all = int(summary_df["overdue_works"].sum())
@@ -684,246 +649,186 @@ overall_overdue_pct = (
     else 0.0
 )
 
-k1, k2, k3, k4, k5 = st.columns(5)
-k1.metric("📅 Comparison Date (Today)", today_str)
-k2.metric(f"👥 Total Officers ({view_choice})", len(summary_df))
-k3.metric("📋 Total Works Assigned", f"{total_assigned_all:,}")
-k4.metric(
-    "🔴 Total Overdue Works ('P')",
-    f"{total_overdue_all:,} ({overall_overdue_pct}%)",
+st.markdown(
+    f"""
+    <div class="kpi-grid">
+        <div class="kpi-card-red">
+            <div class="kpi-label">🔴 Overdue Works ('P')</div>
+            <div class="kpi-val">{total_overdue_all:,} ({overall_overdue_pct}%)</div>
+        </div>
+        <div class="kpi-card-green">
+            <div class="kpi-label">🟢 Total 'ETS' Works</div>
+            <div class="kpi-val">{total_ets_all:,}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">📋 Total Works Assigned</div>
+            <div class="kpi-val">{total_assigned_all:,}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">👥 Total Officers</div>
+            <div class="kpi-val">{len(summary_df):,}</div>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
-k5.metric("🟢 Total 'ETS' Works", f"{total_ets_all:,}")
-
-st.divider()
 
 # -----------------------------------------------------------------------------
-# HORIZONTAL BAR CHART (RED = OVERDUE 'P', LIGHT GREEN = 'ETS', GREY = REST)
+# MOBILE PORTRAIT HORIZONTAL BAR CHART (RED = OVERDUE, GREEN = ETS, GREY = REST)
 # -----------------------------------------------------------------------------
-st.subheader(f"📈 Overdue & ETS Works by {view_choice} ({sort_choice})")
+if filter_mode == "Overdue > 0 Only":
+    chart_source_df = summary_df[summary_df["overdue_works"] > 0].copy()
+elif filter_mode == "Top 20 Officers":
+    chart_source_df = summary_df.head(20).copy()
+elif filter_mode == "Top 35 Officers":
+    chart_source_df = summary_df.head(35).copy()
+else:
+    chart_source_df = summary_df.copy()
 
-chart_source_df = (
-    summary_df[summary_df["overdue_works"] > 0].copy()
-    if hide_zero_overdue
-    else summary_df.copy()
+st.markdown(
+    """
+    <div class="legend-bar">
+        <span><span class="dot-red">■</span> Overdue ('P')</span>
+        <span><span class="dot-green">■</span> ETS Works</span>
+        <span><span class="dot-grey">■</span> Rest of Works</span>
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
 
 if chart_source_df.empty:
     st.info("No officers match the current filter.")
 else:
     plot_df = chart_source_df.iloc[::-1].copy()
-    plot_df["y_short"] = plot_df[view_choice].map(lambda s: shorten_label(s, 28))
+    plot_df["y_short"] = plot_df[view_choice].map(lambda s: shorten_mobile_label(s, 15))
+    plot_df["overdue_plus_ets"] = plot_df["overdue_works"] + plot_df["ets_works"]
 
-    if sort_choice == "Highest Overdue Percentage (%) at Top":
+    # Concise label so it fits cleanly on narrow portrait screens
+    if sort_choice == "Highest Overdue %":
         plot_df["bar_label"] = plot_df.apply(
             lambda r: (
-                f"  <b>{r['overdue_pct']:.1f}% Overdue</b> "
-                f"({int(r['overdue_works'])} Overdue | {int(r['ets_works'])} ETS / {int(r['total_works'])} Total)"
+                f" <b>{r['overdue_pct']:.0f}%</b> "
+                f"({int(r['overdue_works'])} OD | {int(r['ets_works'])} ETS / {int(r['total_works'])})"
             ),
             axis=1,
         )
     else:
         plot_df["bar_label"] = plot_df.apply(
             lambda r: (
-                f"  <b>{int(r['overdue_works'])} Overdue</b> | "
+                f" <b>{int(r['overdue_works'])} OD</b> | "
                 f"<span style='color:#4ADE80'>{int(r['ets_works'])} ETS</span> / "
-                f"{int(r['total_works'])} Total ({r['overdue_pct']:.1f}%)"
+                f"{int(r['total_works'])} ({r['overdue_pct']:.0f}%)"
             ),
             axis=1,
         )
 
     fig = go.Figure()
 
-    if chart_style == "Scale by Overdue Works (Full-Width Bars)":
-        fig.add_trace(
-            go.Bar(
-                y=plot_df[view_choice],
-                x=plot_df["overdue_works"],
-                name="Overdue Works ('P')",
-                orientation="h",
-                marker=dict(
-                    color="#EF4444",
-                    line=dict(color="#DC2626", width=1),
-                ),
-                text=plot_df["bar_label"],
-                textposition="outside",
-                textfont=dict(size=13),
-                cliponaxis=False,
-                customdata=plot_df[
-                    [
-                        view_choice,
-                        "total_works",
-                        "ongoing_p_works",
-                        "ets_works",
-                        "rest_works",
-                        "overdue_pct",
-                    ]
-                ],
-                hovertemplate=(
-                    f"<b>{view_choice}:</b> %{{customdata[0]}}<br>"
-                    "<b>Overdue Works ('P'):</b> %{x}<br>"
-                    "<b>ETS Works ('ETS'):</b> %{customdata[3]}<br>"
-                    "<b>Rest of Works:</b> %{customdata[4]}<br>"
-                    "<b>Total Works Assigned:</b> %{customdata[1]}<br>"
-                    "<b>Overdue Percentage:</b> %{customdata[5]:.1f}%<extra></extra>"
-                ),
-            )
+    # 1. Grey Bar: Total Works (visible tail = Rest of Works)
+    fig.add_trace(
+        go.Bar(
+            y=plot_df[view_choice],
+            x=plot_df["total_works"],
+            name="Rest of Works",
+            orientation="h",
+            marker=dict(
+                color="rgba(148, 163, 184, 0.28)",
+                line=dict(color="#64748B", width=1),
+            ),
+            text=plot_df["bar_label"],
+            textposition="outside",
+            textfont=dict(size=11),
+            cliponaxis=False,
+            customdata=plot_df[
+                [
+                    view_choice,
+                    "total_works",
+                    "overdue_works",
+                    "ets_works",
+                    "rest_works",
+                    "overdue_pct",
+                ]
+            ],
+            hovertemplate=(
+                "<b>%{customdata[0]}</b><br>"
+                "🔴 Overdue ('P'): <b>%{customdata[2]}</b> (%{customdata[5]:.1f}%)<br>"
+                "🟢 ETS Works: <b>%{customdata[3]}</b><br>"
+                "⚪ Rest of Works: <b>%{customdata[4]}</b><br>"
+                "📋 Total Works: <b>%{customdata[1]}</b><extra></extra>"
+            ),
         )
-        max_x = max(int(plot_df["overdue_works"].max()), 1)
-        x_range_max = max_x * 1.34
-        x_axis_title = "Number of Overdue Works"
+    )
 
-    elif chart_style == "Scale by Overdue Percentage (%)":
-        fig.add_trace(
-            go.Bar(
-                y=plot_df[view_choice],
-                x=plot_df["overdue_pct"],
-                name="Overdue %",
-                orientation="h",
-                marker=dict(
-                    color="#EF4444",
-                    line=dict(color="#DC2626", width=1),
-                ),
-                text=plot_df["bar_label"],
-                textposition="outside",
-                textfont=dict(size=13),
-                cliponaxis=False,
-                customdata=plot_df[
-                    [
-                        view_choice,
-                        "total_works",
-                        "ongoing_p_works",
-                        "overdue_works",
-                        "ets_works",
-                        "rest_works",
-                    ]
-                ],
-                hovertemplate=(
-                    f"<b>{view_choice}:</b> %{{customdata[0]}}<br>"
-                    "<b>Overdue Percentage:</b> %{x:.1f}%<br>"
-                    "<b>Overdue Works ('P'):</b> %{customdata[3]}<br>"
-                    "<b>ETS Works ('ETS'):</b> %{customdata[4]}<br>"
-                    "<b>Rest of Works:</b> %{customdata[5]}<br>"
-                    "<b>Total Works Assigned:</b> %{customdata[1]}<extra></extra>"
-                ),
-            )
+    # 2. Light Green Bar: Overdue + ETS (visible middle = ETS Works)
+    fig.add_trace(
+        go.Bar(
+            y=plot_df[view_choice],
+            x=plot_df["overdue_plus_ets"],
+            name="ETS Works",
+            orientation="h",
+            marker=dict(color="#4ADE80"),
+            customdata=plot_df[
+                [
+                    view_choice,
+                    "total_works",
+                    "overdue_works",
+                    "ets_works",
+                    "rest_works",
+                    "overdue_pct",
+                ]
+            ],
+            hovertemplate=(
+                "<b>%{customdata[0]}</b><br>"
+                "🟢 ETS Works: <b>%{customdata[3]}</b><br>"
+                "🔴 Overdue ('P'): <b>%{customdata[2]}</b> (%{customdata[5]:.1f}%)<br>"
+                "📋 Total Works: <b>%{customdata[1]}</b><extra></extra>"
+            ),
         )
-        max_x = max(float(plot_df["overdue_pct"].max()), 1.0)
-        x_range_max = max_x * 1.34
-        x_axis_title = "Overdue Percentage (%)"
+    )
 
-    else:
-        # Cumulative overlay:
-        # 1. Grey bar = Full length (Total Works) -> visible part is Rest of Works
-        # 2. Light Green bar = Overdue + ETS -> visible part right after Red is ETS Works
-        # 3. Red bar = Overdue Works -> visible part at the start is Overdue ('P')
-        plot_df["overdue_plus_ets"] = plot_df["overdue_works"] + plot_df["ets_works"]
-
-        fig.add_trace(
-            go.Bar(
-                y=plot_df[view_choice],
-                x=plot_df["total_works"],
-                name="Rest of Works (Other Statuses)",
-                orientation="h",
-                marker=dict(
-                    color="rgba(148, 163, 184, 0.30)",
-                    line=dict(color="#64748B", width=1),
-                ),
-                text=plot_df["bar_label"],
-                textposition="outside",
-                textfont=dict(size=13),
-                cliponaxis=False,
-                customdata=plot_df[
-                    [
-                        view_choice,
-                        "total_works",
-                        "overdue_works",
-                        "ets_works",
-                        "rest_works",
-                        "overdue_pct",
-                    ]
-                ],
-                hovertemplate=(
-                    f"<b>{view_choice}:</b> %{{customdata[0]}}<br>"
-                    "<b>Total Works Assigned:</b> %{customdata[1]}<br>"
-                    "<b>Overdue Works ('P'):</b> %{customdata[2]}<br>"
-                    "<b>ETS Works ('ETS'):</b> %{customdata[3]}<br>"
-                    "<b>Rest of Works:</b> %{customdata[4]}<br>"
-                    "<b>Overdue Percentage:</b> %{customdata[5]:.1f}%<extra></extra>"
-                ),
-            )
+    # 3. Red Bar: Overdue Works ('P')
+    fig.add_trace(
+        go.Bar(
+            y=plot_df[view_choice],
+            x=plot_df["overdue_works"],
+            name="Overdue Works ('P')",
+            orientation="h",
+            marker=dict(color="#EF4444"),
+            customdata=plot_df[
+                [
+                    view_choice,
+                    "total_works",
+                    "overdue_works",
+                    "ets_works",
+                    "rest_works",
+                    "overdue_pct",
+                ]
+            ],
+            hovertemplate=(
+                "<b>%{customdata[0]}</b><br>"
+                "🔴 Overdue ('P'): <b>%{customdata[2]}</b> (%{customdata[5]:.1f}%)<br>"
+                "🟢 ETS Works: <b>%{customdata[3]}</b><br>"
+                "📋 Total Works: <b>%{customdata[1]}</b><extra></extra>"
+            ),
         )
+    )
 
-        fig.add_trace(
-            go.Bar(
-                y=plot_df[view_choice],
-                x=plot_df["overdue_plus_ets"],
-                name="ETS Works ('ETS')",
-                orientation="h",
-                marker=dict(color="#4ADE80"),
-                customdata=plot_df[
-                    [
-                        view_choice,
-                        "total_works",
-                        "overdue_works",
-                        "ets_works",
-                        "rest_works",
-                        "overdue_pct",
-                    ]
-                ],
-                hovertemplate=(
-                    f"<b>{view_choice}:</b> %{{customdata[0]}}<br>"
-                    "<b>ETS Works ('ETS'):</b> %{customdata[3]}<br>"
-                    "<b>Overdue Works ('P'):</b> %{customdata[2]}<br>"
-                    "<b>Rest of Works:</b> %{customdata[4]}<br>"
-                    "<b>Total Works Assigned:</b> %{customdata[1]}<br>"
-                    "<b>Overdue Percentage:</b> %{customdata[5]:.1f}%<extra></extra>"
-                ),
-            )
-        )
-
-        fig.add_trace(
-            go.Bar(
-                y=plot_df[view_choice],
-                x=plot_df["overdue_works"],
-                name="Overdue Works ('P')",
-                orientation="h",
-                marker=dict(color="#EF4444"),
-                customdata=plot_df[
-                    [
-                        view_choice,
-                        "total_works",
-                        "ongoing_p_works",
-                        "overdue_pct",
-                        "ets_works",
-                        "rest_works",
-                    ]
-                ],
-                hovertemplate=(
-                    f"<b>{view_choice}:</b> %{{customdata[0]}}<br>"
-                    "<b>Overdue Works ('P'):</b> %{x}<br>"
-                    "<b>ETS Works ('ETS'):</b> %{customdata[4]}<br>"
-                    "<b>Rest of Works:</b> %{customdata[5]}<br>"
-                    "<b>Total Works Assigned:</b> %{customdata[1]}<br>"
-                    "<b>Overdue Percentage:</b> %{customdata[3]:.1f}%<extra></extra>"
-                ),
-            )
-        )
-
-        max_x = max(int(plot_df["total_works"].max()), 1)
-        x_range_max = max_x * 1.36
-        x_axis_title = "Number of Works"
-
-    chart_height = max(500, len(plot_df) * 36 + 90)
+    max_x = max(int(plot_df["total_works"].max()), 1)
+    x_range_max = max_x * 1.52
+    chart_height = max(360, len(plot_df) * 32 + 50)
 
     fig.update_layout(
         barmode="overlay",
         height=chart_height,
-        bargap=0.22,
+        bargap=0.24,
+        showlegend=False,
         xaxis=dict(
-            title=x_axis_title,
+            title="",
             range=[0, x_range_max],
-            gridcolor="rgba(200, 200, 200, 0.2)",
+            gridcolor="rgba(200, 200, 200, 0.15)",
             zeroline=True,
+            fixedrange=True,  # Prevents accidental zoom while scrolling on phone
+            tickfont=dict(size=10),
         ),
         yaxis=dict(
             title="",
@@ -931,64 +836,27 @@ else:
             tickmode="array",
             tickvals=plot_df[view_choice],
             ticktext=plot_df["y_short"],
-            tickfont=dict(size=13),
+            tickfont=dict(size=11),
+            fixedrange=True,  # Prevents accidental pan while scrolling on phone
         ),
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.01,
-            xanchor="left",
-            x=0,
-            traceorder="reversed",
-        ),
-        margin=dict(l=210, r=40, t=40, b=40),
+        margin=dict(l=118, r=10, t=10, b=25),
     )
 
-    st.plotly_chart(fig, use_container_width=True)
-
-# -----------------------------------------------------------------------------
-# DETAILED SUMMARY TABLE
-# -----------------------------------------------------------------------------
-st.subheader("📋 Officer-Wise Summary Table")
-
-display_table = summary_df[
-    [
-        view_choice,
-        "total_works",
-        "overdue_works",
-        "ets_works",
-        "rest_works",
-        "ongoing_p_works",
-        "overdue_pct",
-    ]
-].rename(
-    columns={
-        "total_works": "Total Works Assigned",
-        "overdue_works": "Overdue Works ('P')",
-        "ets_works": "ETS Works ('ETS')",
-        "rest_works": "Rest of Works",
-        "ongoing_p_works": "Ongoing Works ('P')",
-        "overdue_pct": "Overdue %",
-    }
-)
-display_table.index = display_table.index + 1
-
-st.dataframe(
-    display_table.style.format({"Overdue %": "{:.1f}%"}),
-    use_container_width=True,
-)
+    # Disable Plotly floating toolbar for clean mobile touch scrolling
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+        config={"displayModeBar": False, "scrollZoom": False},
+    )
 
 st.divider()
 
 # -----------------------------------------------------------------------------
-# BOTTOM SECTION: OFFICER DROPDOWN & COMBINED OVERDUE WORKS TABLE + DOWNLOAD
+# OFFICER DRILL-DOWN (MOBILE CARDS + FULL SPREADSHEET TABLE + DOWNLOAD)
 # -----------------------------------------------------------------------------
-st.subheader(
-    f"📂 ಅಧಿಕಾರಿಗಳ ವಾರು ಅವಧಿ ಮೀರಿದ ಕಾಮಗಾರಿಗಳ ವಿವರ / Combined Overdue Works by {view_choice}"
-)
+st.markdown("##### 📂 Officer Overdue Works Drill-Down & Download")
 
 officer_options = summary_df[view_choice].tolist()
-
 officer_stats_map = {
     row[view_choice]: (
         int(row["overdue_works"]),
@@ -1000,13 +868,13 @@ officer_stats_map = {
 }
 
 selected_officer = st.selectbox(
-    f"Select {view_choice} to view and download all their Overdue Works across all worksheets:",
+    f"Tap to select {view_choice}:",
     options=officer_options,
     index=0 if officer_options else None,
     format_func=lambda name: (
-        f"{name}  —  ({officer_stats_map[name][0]} Overdue | "
-        f"{officer_stats_map[name][1]} ETS / "
-        f"{officer_stats_map[name][2]} Total | {officer_stats_map[name][3]:.1f}%)"
+        f"{name} ({officer_stats_map[name][0]} OD | "
+        f"{officer_stats_map[name][1]} ETS / {officer_stats_map[name][2]} Total — "
+        f"{officer_stats_map[name][3]:.1f}%)"
     ),
 )
 
@@ -1039,30 +907,33 @@ if selected_officer:
             st.success(f"🎉 **{selected_officer}** has **0** overdue works!")
         else:
             sheets_involved = officer_overdue_df["Worksheet / ಯೋಜನೆ"].unique().tolist()
-            st.markdown(
-                f"**Selected {view_choice}:** `{selected_officer}` &nbsp;|&nbsp; "
-                f"**Total Overdue Works:** `{len(officer_overdue_df)}` &nbsp;|&nbsp; "
-                f"**Worksheets:** `{', '.join(sheets_involved)}`"
+            st.caption(
+                f"**Overdue Works:** `{len(officer_overdue_df)}` &nbsp;|&nbsp; "
+                f"**Sheets:** `{', '.join(sheets_involved)}`"
             )
 
-            safe_name = re.sub(r"[^\w\-]+", "_", selected_officer).strip("_") or "Officer"
+            safe_name = (
+                re.sub(r"[^\w\-]+", "_", selected_officer).strip("_") or "Officer"
+            )
             excel_bytes = convert_df_to_excel_bytes(officer_overdue_df.reset_index())
-            csv_bytes = officer_overdue_df.reset_index().to_csv(index=False).encode("utf-8-sig")
+            csv_bytes = (
+                officer_overdue_df.reset_index().to_csv(index=False).encode("utf-8-sig")
+            )
 
-            dl_col1, dl_col2, _ = st.columns([1.5, 1.5, 5])
-            with dl_col1:
+            dl1, dl2 = st.columns(2)
+            with dl1:
                 st.download_button(
-                    label="📥 Download Excel (.xlsx)",
+                    label="📥 Excel (.xlsx)",
                     data=excel_bytes,
-                    file_name=f"Overdue_Works_{safe_name}_{today_str}.xlsx",
+                    file_name=f"Overdue_{safe_name}_{today_str}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
                 )
-            with dl_col2:
+            with dl2:
                 st.download_button(
-                    label="📥 Download CSV (.csv)",
+                    label="📥 CSV (.csv)",
                     data=csv_bytes,
-                    file_name=f"Overdue_Works_{safe_name}_{today_str}.csv",
+                    file_name=f"Overdue_{safe_name}_{today_str}.csv",
                     mime="text/csv",
                     use_container_width=True,
                 )
@@ -1070,8 +941,49 @@ if selected_officer:
             st.dataframe(
                 officer_overdue_df,
                 use_container_width=True,
-                height=min(600, max(220, (len(officer_overdue_df) + 1) * 42)),
+                height=min(480, max(200, (len(officer_overdue_df) + 1) * 40)),
             )
 
-with st.expander("🔍 Inspect Worksheet Loading Status (23 Target Sheets)"):
+# -----------------------------------------------------------------------------
+# COLLAPSIBLE SUMMARY TABLE & ADMIN SYNC AT THE BOTTOM
+# -----------------------------------------------------------------------------
+with st.expander("📋 View Full Officer-Wise Summary Table"):
+    display_table = summary_df[
+        [
+            view_choice,
+            "overdue_works",
+            "ets_works",
+            "total_works",
+            "overdue_pct",
+        ]
+    ].rename(
+        columns={
+            "overdue_works": "Overdue ('P')",
+            "ets_works": "ETS",
+            "total_works": "Total",
+            "overdue_pct": "Overdue %",
+        }
+    )
+    display_table.index = display_table.index + 1
+    st.dataframe(
+        display_table.style.format({"Overdue %": "{:.1f}%"}),
+        use_container_width=True,
+    )
+
+with st.expander("⚙️ Sync / Refresh Live Data from Google Sheets"):
+    sheet_url_input = st.text_input(
+        "Google Spreadsheet Link",
+        value=DEFAULT_SHEET_URL,
+    )
+    if st.button(
+        "🔄 Sync Latest Data Now",
+        use_container_width=True,
+        type="primary",
+    ):
+        with shared_state["lock"]:
+            with st.spinner("Syncing latest changes from Google Sheets..."):
+                xlsx_bytes = download_xlsx_bytes(sheet_url_input)
+                parsed = parse_xlsx_workbook(xlsx_bytes)
+                save_shared_state(shared_state, parsed, "Live Google Sheet")
+                st.rerun()
     st.dataframe(diag_df, use_container_width=True)
