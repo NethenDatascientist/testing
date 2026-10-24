@@ -227,15 +227,12 @@ st.markdown(
             white-space: normal;
         }
         .ce-work-name-clamp {
-            display: -webkit-box;
-            -webkit-line-clamp: 3;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            display: block;
             line-height: 1.32;
-            max-height: 3.96em;
             font-weight: 600;
             color: #F8FAFC;
+            white-space: normal;
+            word-wrap: break-word;
         }
         .ce-compact-cell {
             white-space: nowrap;
