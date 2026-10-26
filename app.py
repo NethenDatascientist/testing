@@ -154,6 +154,8 @@ st.markdown(
         div[data-baseweb="select"] input {
             pointer-events: none !important;
             caret-color: transparent !important;
+            user-select: none !important;
+            -webkit-user-select: none !important;
         }
 
         /* 4. 5-Box Mobile KPI Grid */
@@ -438,65 +440,6 @@ st.markdown(
             color: #FCA5A5;
         }
 
-        /* Fallback Compact Table CSS (Horizontal Scroll Only) */
-        .ce-table-wrapper {
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-            border: 1px solid rgba(148, 163, 184, 0.22);
-            border-radius: 12px;
-            background: rgba(15, 23, 42, 0.78);
-            margin-top: 0.35rem;
-            margin-bottom: 0.75rem;
-        }
-        table.ce-overdue-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.78rem;
-            color: #E2E8F0;
-        }
-        table.ce-overdue-table thead th {
-            background: #273346;
-            color: #F1F5F9;
-            font-weight: 700;
-            text-align: left;
-            padding: 9px 8px;
-            border-bottom: 2px solid #3B82F6;
-            white-space: nowrap;
-        }
-        table.ce-overdue-table tbody tr {
-            border-bottom: 1px solid rgba(148, 163, 184, 0.12);
-        }
-        table.ce-overdue-table td {
-            padding: 7px 8px;
-            vertical-align: middle;
-        }
-        .ce-work-name-cell {
-            min-width: 220px;
-            max-width: 280px;
-            white-space: normal;
-        }
-        .ce-work-name-clamp {
-            display: block;
-            line-height: 1.35;
-            font-weight: 600;
-            color: #F8FAFC;
-            white-space: normal;
-            word-wrap: break-word;
-        }
-        .ce-compact-cell {
-            white-space: nowrap;
-        }
-        .ce-date-overdue {
-            color: #FCA5A5;
-            font-weight: 700;
-            white-space: nowrap;
-        }
-        .ce-sl-cell {
-            text-align: center;
-            font-weight: 600;
-            color: #94A3B8;
-        }
-
         hr {
             margin-top: 0.5rem !important;
             margin-bottom: 0.55rem !important;
@@ -506,6 +449,52 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+
+# -----------------------------------------------------------------------------
+# PREVENT MOBILE VIRTUAL KEYBOARD FROM POPPING UP ON DROPDOWN TAP
+# -----------------------------------------------------------------------------
+def disable_mobile_select_keyboard():
+    """Locks all selectbox inputs to readonly/inputmode=none on render and before touch/focus so iOS/Android never open the keyboard."""
+    components.html(
+        """
+        <script>
+        (function() {
+            const parentDoc = window.parent.document;
+
+            function lockSelectInputs() {
+                const inputs = parentDoc.querySelectorAll('div[data-baseweb="select"] input');
+                inputs.forEach(input => {
+                    input.readOnly = true;
+                    input.setAttribute('readonly', 'readonly');
+                    input.setAttribute('inputmode', 'none');
+                    input.setAttribute('autocomplete', 'off');
+                    input.setAttribute('autocorrect', 'off');
+                    input.setAttribute('autocapitalize', 'off');
+                    input.setAttribute('spellcheck', 'false');
+                });
+            }
+
+            lockSelectInputs();
+
+            if (!window.parent.__miSelectTouchLockAdded) {
+                parentDoc.addEventListener('touchstart', lockSelectInputs, { capture: true, passive: true });
+                parentDoc.addEventListener('pointerdown', lockSelectInputs, { capture: true, passive: true });
+                parentDoc.addEventListener('mousedown', lockSelectInputs, { capture: true, passive: true });
+                window.parent.__miSelectTouchLockAdded = true;
+            }
+
+            if (!window.parent.__miSelectKeyboardObserver) {
+                const observer = new MutationObserver(lockSelectInputs);
+                observer.observe(parentDoc.body, { childList: true, subtree: true });
+                window.parent.__miSelectKeyboardObserver = observer;
+            }
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
 
 
 # -----------------------------------------------------------------------------
@@ -564,15 +553,15 @@ DEFAULT_SHEET_URL = st.secrets.get(
     "https://docs.google.com/spreadsheets/d/13W04z-fdU3RhuVJ5vQFRpK4BBSQRJWfscPqpr7Oj2Y8/edit?gid=1055199869#gid=1055199869",
 )
 
-SCHEMA_VERSION = "v16_ce_mobile_clean"
-DISK_BACKUP_FILE = "/tmp/mi_overdue_shared_snapshot_v16_mob.pkl"
+SCHEMA_VERSION = "v17_ce_mobile_fixed"
+DISK_BACKUP_FILE = "/tmp/mi_overdue_shared_snapshot_v17_mob.pkl"
 
 
 # -----------------------------------------------------------------------------
 # SHARED SERVER MEMORY & LOCK
 # -----------------------------------------------------------------------------
 @st.cache_resource
-def get_shared_state_v16_mob() -> dict:
+def get_shared_state_v17_mob() -> dict:
     state = {
         "version": SCHEMA_VERSION,
         "lock": threading.Lock(),
@@ -1008,6 +997,12 @@ def map_officer_or_unassigned(name: str) -> str:
     ):
         return UNASSIGNED_LABEL
     return name
+
+
+def display_clean_cell(val: str) -> str:
+    if not val or val in {UNSPECIFIED_LABEL, UNASSIGNED_LABEL}:
+        return "-"
+    return val
 
 
 # -----------------------------------------------------------------------------
@@ -1492,7 +1487,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-shared_state = get_shared_state_v16_mob()
+shared_state = get_shared_state_v17_mob()
 
 needs_fresh_load = (
     shared_state["data"] is None
@@ -1502,7 +1497,7 @@ needs_fresh_load = (
 
 if not needs_fresh_load and shared_state["data"] is not None:
     _, cached_od_df, _, _ = shared_state["data"]
-    if not cached_od_df.empty and (
+    if cached_od_df.empty or (
         "Overdue By" not in cached_od_df.columns
         or COL_WORK_NAME_KN not in cached_od_df.columns
     ):
@@ -1790,7 +1785,7 @@ else:
 st.divider()
 
 # =============================================================================
-# SECTION 2: COMBINED OVERDUE WORKS (MOBILE DOSSIER CARDS - NO INNER SCROLLER)
+# SECTION 2: COMBINED OVERDUE WORKS BY SELECTED AE / AEE
 # =============================================================================
 st.markdown(
     f"""
@@ -1802,43 +1797,66 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-if overdue_full_df.empty:
-    st.info("No overdue works found across the 23 worksheets.")
-else:
-    officer_overdue_df = overdue_full_df.copy()
+officer_options = (
+    chart_source_df[view_choice].tolist()
+    if not chart_source_df.empty
+    else summary_df[view_choice].tolist()
+)
 
-    # Filter by the active scope selections from the top
-    if selected_division != ALL_OPTION:
-        officer_overdue_df = officer_overdue_df[
-            officer_overdue_df["_division_name"] == selected_division
-        ]
-    if selected_subdivision != ALL_OPTION:
-        officer_overdue_df = officer_overdue_df[
-            officer_overdue_df["_subdivision_name"] == selected_subdivision
-        ]
-    if selected_ee != ALL_OPTION:
-        officer_overdue_df = officer_overdue_df[
-            officer_overdue_df["_ee_name"] == selected_ee
-        ]
-    if selected_ta != ALL_OPTION:
-        officer_overdue_df = officer_overdue_df[
-            officer_overdue_df["_ta_name"] == selected_ta
-        ]
-    if selected_as != ALL_OPTION:
-        officer_overdue_df = officer_overdue_df[
-            officer_overdue_df["_as_name"] == selected_as
-        ]
-        
-    if not show_unassigned_bar:
-        officer_overdue_df = officer_overdue_df[
-            officer_overdue_df[full_filter_col] != UNASSIGNED_LABEL
-        ]
+officer_stats_map = {
+    row[view_choice]: (
+        int(row["overdue_works"]),
+        int(row["ets_works"]),
+        int(row["total_works"]),
+        float(row["overdue_pct"]),
+    )
+    for _, row in summary_df.iterrows()
+}
 
-    if officer_overdue_df.empty:
-        st.success(
-            f"🎉 **0** overdue works in **{filter_scope_label}**!"
-        )
+selected_officer = st.selectbox(
+    f"Tap to select {view_choice} to inspect their Overdue Works:",
+    options=officer_options,
+    index=0 if officer_options else None,
+    format_func=lambda name: (
+        f"{name} ({officer_stats_map[name][0]} Overdue | "
+        f"{officer_stats_map[name][1]} ETS / {officer_stats_map[name][2]} Total — "
+        f"{officer_stats_map[name][3]:.1f}%)"
+    ),
+)
+
+if selected_officer:
+    if overdue_full_df.empty:
+        st.info("No overdue works found across the 23 worksheets.")
     else:
+        officer_overdue_df = overdue_full_df[
+            overdue_full_df[full_filter_col] == selected_officer
+        ].copy()
+
+        if selected_division != ALL_OPTION:
+            officer_overdue_df = officer_overdue_df[
+                officer_overdue_df["_division_name"] == selected_division
+            ].copy()
+
+        if selected_subdivision != ALL_OPTION:
+            officer_overdue_df = officer_overdue_df[
+                officer_overdue_df["_subdivision_name"] == selected_subdivision
+            ].copy()
+
+        if selected_ee != ALL_OPTION:
+            officer_overdue_df = officer_overdue_df[
+                officer_overdue_df["_ee_name"] == selected_ee
+            ].copy()
+
+        if selected_ta != ALL_OPTION:
+            officer_overdue_df = officer_overdue_df[
+                officer_overdue_df["_ta_name"] == selected_ta
+            ].copy()
+
+        if selected_as != ALL_OPTION:
+            officer_overdue_df = officer_overdue_df[
+                officer_overdue_df["_as_name"] == selected_as
+            ].copy()
+
         opposite_officer_col = (
             COL_AEE_KN if view_choice == LABEL_AE_EN else COL_SO_KN
         )
@@ -1874,17 +1892,17 @@ else:
         officer_overdue_df.rename(columns=rename_map, inplace=True)
         officer_overdue_df.insert(0, "Sl. No.", range(1, len(officer_overdue_df) + 1))
 
-        # Show exactly how many filtered works are displayed
-        st.caption(
-            f"Showing **{len(officer_overdue_df)}** Total Overdue Works matching the current filter:"
-        )
-
-        st.markdown(
-            render_mobile_work_dossier_cards(
-                officer_overdue_df, opposite_officer_en
-            ),
-            unsafe_allow_html=True,
-        )
+        if officer_overdue_df.empty:
+            st.success(
+                f"🎉 **{selected_officer}** has **0** overdue works in **{filter_scope_label}**!"
+            )
+        else:
+            st.markdown(
+                render_mobile_work_dossier_cards(
+                    officer_overdue_df, opposite_officer_en
+                ),
+                unsafe_allow_html=True,
+            )
 
 with st.expander("🔍 Inspect Worksheet Loading Status & Quick Sync (23 Target Sheets)"):
     if st.button(
@@ -1902,3 +1920,6 @@ with st.expander("🔍 Inspect Worksheet Loading Status & Quick Sync (23 Target 
                 )
                 st.rerun()
     st.dataframe(diag_df, use_container_width=True)
+
+# Lock selectbox inputs so tapping a dropdown on mobile never opens the keyboard
+disable_mobile_select_keyboard()
