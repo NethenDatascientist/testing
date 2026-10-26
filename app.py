@@ -13,7 +13,6 @@ import openpyxl
 import pandas as pd
 import requests
 import streamlit as st
-import streamlit.components.v1 as components
 
 # -----------------------------------------------------------------------------
 # PAGE CONFIGURATION (MOBILE PORTRAIT OPTIMIZED FOR CE)
@@ -39,9 +38,9 @@ st.markdown(
         .block-container {
             max-width: 640px !important;
             padding-left: 0.65rem !important;
-            padding-right: 0.80rem !important;
+            padding-right: 0.65rem !important;
             padding-top: 2.2rem !important;
-            padding-bottom: 2.5rem !important;
+            padding-bottom: 2.2rem !important;
         }
 
         /* 1. Compact Mobile Sidebar (200px) & Always-Visible Toggle Button */
@@ -70,21 +69,23 @@ st.markdown(
             border-radius: 10px !important;
             color: #93C5FD !important;
             box-shadow: 0 0 10px rgba(59, 130, 246, 0.35), 0 2px 6px rgba(0, 0, 0, 0.5) !important;
-            width: 34px !important;
-            height: 34px !important;
-            min-height: 34px !important;
+            width: 32px !important;
+            height: 32px !important;
+            min-height: 32px !important;
         }
 
-        /* 2. Clean Borderless Mobile Header */
+        /* 2. Strictly 1-Line Small Mobile Header */
         .premium-compact-header {
             display: flex;
             align-items: center;
-            gap: 0.65rem;
-            padding: 0.25rem 0;
-            margin-top: 0.2rem;
+            gap: 0.45rem;
+            padding: 0.15rem 0;
+            margin-top: 0.1rem;
             margin-bottom: 0.45rem;
             background: transparent;
             border: none;
+            width: 100%;
+            overflow: hidden;
         }
         .premium-icon-wrapper {
             display: flex;
@@ -92,20 +93,23 @@ st.markdown(
             justify-content: center;
             background: rgba(59, 130, 246, 0.15);
             border: 1px solid rgba(59, 130, 246, 0.35);
-            border-radius: 8px;
-            width: 34px;
-            height: 34px;
-            font-size: 1.15rem;
+            border-radius: 6px;
+            width: 24px;
+            height: 24px;
+            font-size: 0.85rem;
             flex-shrink: 0;
-            box-shadow: 0 0 10px rgba(59, 130, 246, 0.25);
+            box-shadow: 0 0 8px rgba(59, 130, 246, 0.25);
         }
         .premium-compact-title {
-            font-size: 1.18rem;
-            font-weight: 800;
-            color: #F8FAFC;
-            margin: 0;
-            line-height: 1.2;
-            letter-spacing: -0.2px;
+            font-size: clamp(0.78rem, 3.6vw, 1.0rem) !important;
+            font-weight: 800 !important;
+            color: #F8FAFC !important;
+            margin: 0 !important;
+            line-height: 1.2 !important;
+            letter-spacing: -0.3px !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
         }
 
         /* Status Bar */
@@ -223,7 +227,7 @@ st.markdown(
             border-left: 4px solid #3B82F6;
         }
         .exec-section-title {
-            font-size: 1.05rem;
+            font-size: 1.02rem;
             font-weight: 700;
             color: #F8FAFC;
             line-height: 1.25;
@@ -240,7 +244,7 @@ st.markdown(
             word-break: break-word;
         }
 
-        /* 6. SECTION 1: Mobile Officer Scorecards (Replaces cramped bar chart) */
+        /* 6. SECTION 1: Mobile Officer Scorecards */
         .scorecard-list-wrapper {
             max-height: 470px;
             overflow-y: auto;
@@ -509,193 +513,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-
-# -----------------------------------------------------------------------------
-# ULTRA-SLIM (14px), TEXT-FREE RIGHT-EDGE SCROLLER
-# -----------------------------------------------------------------------------
-def inject_scroll_hud_graphics(enabled: bool = True):
-    components.html(
-        f"""
-        <script>
-        (function() {{
-            const parentDoc = window.parent.document;
-            const parentWin = window.parent;
-            const isEnabled = {str(enabled).lower()};
-
-            if (parentWin.__miScrollHudRAF) {{
-                parentWin.cancelAnimationFrame(parentWin.__miScrollHudRAF);
-            }}
-            if (parentWin.__miScrollHandler) {{
-                parentDoc.removeEventListener("scroll", parentWin.__miScrollHandler, {{ capture: true }});
-            }}
-
-            const oldHud = parentDoc.getElementById("mi-scroll-hud-root");
-            if (oldHud) oldHud.remove();
-
-            const oldStyle = parentDoc.getElementById("mi-scroll-hud-style");
-            if (oldStyle) oldStyle.remove();
-
-            if (!isEnabled) return;
-
-            const style = parentDoc.createElement("style");
-            style.id = "mi-scroll-hud-style";
-            style.innerHTML = `
-                @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@600;700&display=swap');
-
-                #mi-scroll-hud-root {{
-                    position: fixed !important;
-                    top: 0 !important;
-                    right: 0 !important;
-                    width: 14px !important;
-                    height: 100vh !important;
-                    z-index: 999990 !important;
-                    pointer-events: none !important;
-                    user-select: none !important;
-                    background: transparent !important;
-                    font-family: 'JetBrains Mono', monospace !important;
-                }}
-                #mi-scroll-hud-track {{
-                    position: absolute !important;
-                    top: 0 !important;
-                    right: 0 !important;
-                    width: 14px !important;
-                    height: 100vh !important;
-                    overflow: hidden !important;
-                }}
-                #mi-scroll-hud-ticks-inner {{
-                    position: absolute !important;
-                    top: 0 !important;
-                    right: 0 !important;
-                    width: 100% !important;
-                    will-change: transform;
-                }}
-                .mi-hud-tick {{
-                    position: absolute;
-                    right: 0;
-                    display: flex;
-                    align-items: center;
-                    justify-content: flex-end;
-                    transform: translateY(-50%);
-                }}
-                .mi-hud-tick-label {{
-                    font-size: 7px;
-                    font-weight: 600;
-                    color: rgba(226, 232, 240, 0.42);
-                    margin-right: 1.5px;
-                }}
-                .mi-hud-tick-line-major {{
-                    width: 4px;
-                    height: 1.2px;
-                    background: rgba(226, 232, 240, 0.50);
-                }}
-                .mi-hud-tick-line-mid {{
-                    width: 2.5px;
-                    height: 1px;
-                    background: rgba(226, 232, 240, 0.24);
-                }}
-                #mi-scroll-hud-indicator {{
-                    position: absolute;
-                    right: 0;
-                    width: 14px;
-                    top: 50%;
-                    transform: translateY(-1px);
-                    z-index: 6;
-                }}
-                #mi-scroll-hud-blue-line {{
-                    width: 14px;
-                    height: 2px;
-                    background: linear-gradient(90deg, rgba(59, 130, 246, 0.2) 0%, #3B82F6 45%, #93C5FD 100%);
-                    box-shadow: 0 0 6px rgba(59, 130, 246, 0.95);
-                }}
-                #mi-scroll-hud-pct {{
-                    margin-top: 2px;
-                    padding-right: 1px;
-                    text-align: right;
-                    font-size: 7px;
-                    font-weight: 700;
-                    color: #93C5FD;
-                }}
-            `;
-            parentDoc.head.appendChild(style);
-
-            const PX_PER_UNIT = 38;
-            const hudRoot = parentDoc.createElement("div");
-            hudRoot.id = "mi-scroll-hud-root";
-
-            let ticksHtml = "";
-            for (let step = -20; step <= 220; step++) {{
-                const unitVal = step * 0.5;
-                const yPos = unitVal * PX_PER_UNIT;
-                if (step % 10 === 0 && unitVal >= 0 && unitVal <= 100) {{
-                    ticksHtml += `<div class="mi-hud-tick" style="top: ${{yPos}}px;"><span class="mi-hud-tick-label">${{unitVal}}</span><div class="mi-hud-tick-line-major"></div></div>`;
-                }} else if (step % 5 === 0) {{
-                    ticksHtml += `<div class="mi-hud-tick" style="top: ${{yPos}}px;"><div class="mi-hud-tick-line-mid"></div></div>`;
-                }}
-            }}
-
-            hudRoot.innerHTML = `
-                <div id="mi-scroll-hud-track"><div id="mi-scroll-hud-ticks-inner">${{ticksHtml}}</div></div>
-                <div id="mi-scroll-hud-indicator"><div id="mi-scroll-hud-blue-line"></div><div id="mi-scroll-hud-pct">0%</div></div>
-            `;
-            parentDoc.body.appendChild(hudRoot);
-
-            parentWin.__miActiveScroller = null;
-            parentWin.__miScrollHandler = function(e) {{
-                const t = e.target;
-                if (t && t !== parentDoc && t.scrollHeight > t.clientHeight + 20 && t.clientHeight > parentWin.innerHeight * 0.45) {{
-                    parentWin.__miActiveScroller = t;
-                }}
-            }};
-            parentDoc.addEventListener("scroll", parentWin.__miScrollHandler, {{ passive: true, capture: true }});
-
-            function findScrollElement() {{
-                const activeScroller = parentWin.__miActiveScroller;
-                if (activeScroller && parentDoc.body.contains(activeScroller) && activeScroller.scrollHeight > activeScroller.clientHeight + 10) {{
-                    return activeScroller;
-                }}
-                const selectors = ['[data-testid="stMain"]', '[data-testid="stAppViewContainer"]', 'section.main', '.main', '[data-testid="stApp"]'];
-                for (const sel of selectors) {{
-                    const el = parentDoc.querySelector(sel);
-                    if (el && el.scrollHeight - el.clientHeight > 10) return el;
-                }}
-                return parentDoc.scrollingElement || parentDoc.documentElement;
-            }}
-
-            function getScrollPercentage() {{
-                const el = findScrollElement();
-                if (!el) return 0;
-                const maxScroll = Math.max(1, el.scrollHeight - el.clientHeight);
-                return Math.max(0, Math.min(100, (el.scrollTop / maxScroll) * 100));
-            }}
-
-            parentWin.__miCurrentPct = parentWin.__miCurrentPct || 0;
-            function loop() {{
-                const root = parentDoc.getElementById("mi-scroll-hud-root");
-                const inner = parentDoc.getElementById("mi-scroll-hud-ticks-inner");
-                const indicator = parentDoc.getElementById("mi-scroll-hud-indicator");
-                const pctLabel = parentDoc.getElementById("mi-scroll-hud-pct");
-
-                if (root && inner && indicator && pctLabel) {{
-                    const targetPct = getScrollPercentage();
-                    parentWin.__miCurrentPct += (targetPct - parentWin.__miCurrentPct) * 0.18;
-                    const vh = root.clientHeight;
-                    const indicatorY = vh * (0.24 + 0.52 * (parentWin.__miCurrentPct / 100.0));
-                    indicator.style.top = `${{indicatorY.toFixed(2)}}px`;
-                    const trackY = indicatorY - (parentWin.__miCurrentPct * PX_PER_UNIT);
-                    inner.style.transform = `translate3d(0, ${{trackY.toFixed(2)}}px, 0)`;
-                    pctLabel.textContent = `${{Math.round(parentWin.__miCurrentPct)}}%`;
-                }}
-                parentWin.__miScrollHudRAF = parentWin.requestAnimationFrame(loop);
-            }}
-            parentWin.__miScrollHudRAF = parentWin.requestAnimationFrame(loop);
-        }})();
-        </script>
-        """,
-        height=0,
-        width=0,
-    )
-
-
 # -----------------------------------------------------------------------------
 # CONSTANTS & TARGET SHEETS
 # -----------------------------------------------------------------------------
@@ -752,15 +569,15 @@ DEFAULT_SHEET_URL = st.secrets.get(
     "https://docs.google.com/spreadsheets/d/13W04z-fdU3RhuVJ5vQFRpK4BBSQRJWfscPqpr7Oj2Y8/edit?gid=1055199869#gid=1055199869",
 )
 
-SCHEMA_VERSION = "v12_ce_mobile_portrait_cards"
-DISK_BACKUP_FILE = "/tmp/mi_overdue_shared_snapshot_v12_mob.pkl"
+SCHEMA_VERSION = "v13_ce_mobile_clean"
+DISK_BACKUP_FILE = "/tmp/mi_overdue_shared_snapshot_v13_mob.pkl"
 
 
 # -----------------------------------------------------------------------------
 # SHARED SERVER MEMORY & LOCK
 # -----------------------------------------------------------------------------
 @st.cache_resource
-def get_shared_state_v12_mob() -> dict:
+def get_shared_state_v13_mob() -> dict:
     state = {
         "version": SCHEMA_VERSION,
         "lock": threading.Lock(),
@@ -1718,25 +1535,20 @@ show_unassigned_bar = st.sidebar.checkbox(
     value=True,
 )
 
-show_scroll_hud = st.sidebar.checkbox(
-    "Show Right-Edge Scroll HUD Ruler",
-    value=True,
-)
-
 # -----------------------------------------------------------------------------
-# MOBILE HEADER & DATA LOAD
+# MOBILE HEADER (STRICTLY 1 LINE) & DATA LOAD
 # -----------------------------------------------------------------------------
 st.markdown(
     """
     <div class="premium-compact-header">
         <div class="premium-icon-wrapper">📊</div>
-        <h1 class="premium-compact-title">Minor Irrigation — Overdue Works Dashboard</h1>
+        <div class="premium-compact-title">Minor Irrigation — Overdue Works Dashboard</div>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
-shared_state = get_shared_state_v12_mob()
+shared_state = get_shared_state_v13_mob()
 
 needs_fresh_load = (
     shared_state["data"] is None
@@ -2001,7 +1813,7 @@ st.markdown(
 )
 
 # =============================================================================
-# SECTION 1: OFFICER OVERDUE SCORECARDS (REPLACES CRAMPED MOBILE BAR CHART)
+# SECTION 1: OFFICER OVERDUE SCORECARDS
 # =============================================================================
 st.markdown(
     f"""
@@ -2220,48 +2032,6 @@ if selected_officer:
                     unsafe_allow_html=True,
                 )
 
-st.divider()
-
-# =============================================================================
-# SECTION 3: OFFICER-WISE SUMMARY TABLE (ENGLISH)
-# =============================================================================
-st.markdown(
-    f"""
-    <div class="exec-section-banner">
-        <div class="exec-section-title">📋 Officer-Wise Summary Table</div>
-        <div class="exec-scope-badge">{html.escape(filter_scope_label)}</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-display_table = summary_df[
-    [
-        view_choice,
-        "total_works",
-        "overdue_works",
-        "ets_works",
-        "rest_works",
-        "ongoing_p_works",
-        "overdue_pct",
-    ]
-].rename(
-    columns={
-        "total_works": "Total Works Assigned",
-        "overdue_works": "Overdue Works ('P')",
-        "ets_works": "ETS Works ('ETS')",
-        "rest_works": "Rest of Works",
-        "ongoing_p_works": "Ongoing Works ('P')",
-        "overdue_pct": "Overdue %",
-    }
-)
-display_table.index = display_table.index + 1
-
-st.dataframe(
-    display_table.style.format({"Overdue %": "{:.1f}%"}),
-    use_container_width=True,
-)
-
 with st.expander("🔍 Inspect Worksheet Loading Status & Quick Sync (23 Target Sheets)"):
     if st.button(
         "🔄 Sync Latest Data Now",
@@ -2278,6 +2048,3 @@ with st.expander("🔍 Inspect Worksheet Loading Status & Quick Sync (23 Target 
                 )
                 st.rerun()
     st.dataframe(diag_df, use_container_width=True)
-
-# Mount the ultra-slim 14px, writing-free right-edge scrolling HUD overlay
-inject_scroll_hud_graphics(enabled=show_scroll_hud)
