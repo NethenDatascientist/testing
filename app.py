@@ -13,6 +13,7 @@ import openpyxl
 import pandas as pd
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 
 # -----------------------------------------------------------------------------
 # PAGE CONFIGURATION (MOBILE PORTRAIT OPTIMIZED FOR CE)
@@ -74,14 +75,14 @@ st.markdown(
             min-height: 32px !important;
         }
 
-        /* 2. Strictly 1-Line Small Mobile Header */
+        /* 2. Strictly 1-Line Mobile Header (Stepped Up 1 Size) */
         .premium-compact-header {
             display: flex;
             align-items: center;
-            gap: 0.45rem;
-            padding: 0.15rem 0;
-            margin-top: 0.1rem;
-            margin-bottom: 0.45rem;
+            gap: 0.5rem;
+            padding: 0.2rem 0;
+            margin-top: 0.15rem;
+            margin-bottom: 0.5rem;
             background: transparent;
             border: none;
             width: 100%;
@@ -93,19 +94,19 @@ st.markdown(
             justify-content: center;
             background: rgba(59, 130, 246, 0.15);
             border: 1px solid rgba(59, 130, 246, 0.35);
-            border-radius: 6px;
-            width: 24px;
-            height: 24px;
-            font-size: 0.85rem;
+            border-radius: 7px;
+            width: 28px;
+            height: 28px;
+            font-size: 1.0rem;
             flex-shrink: 0;
             box-shadow: 0 0 8px rgba(59, 130, 246, 0.25);
         }
         .premium-compact-title {
-            font-size: clamp(0.78rem, 3.6vw, 1.0rem) !important;
+            font-size: clamp(0.92rem, 4.2vw, 1.18rem) !important;
             font-weight: 800 !important;
             color: #F8FAFC !important;
             margin: 0 !important;
-            line-height: 1.2 !important;
+            line-height: 1.25 !important;
             letter-spacing: -0.3px !important;
             white-space: nowrap !important;
             overflow: hidden !important;
@@ -147,6 +148,12 @@ st.markdown(
             background: linear-gradient(145deg, rgba(30, 41, 59, 0.48), rgba(15, 23, 42, 0.68)) !important;
             border: 1px solid rgba(148, 163, 184, 0.18) !important;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+        }
+
+        /* Prevent text cursor on dropdowns */
+        div[data-baseweb="select"] input {
+            caret-color: transparent !important;
+            cursor: pointer !important;
         }
 
         /* 4. 5-Box Mobile KPI Grid (Matching PC Colors: Blue, Violet, Cyan, Red, Green) */
@@ -244,12 +251,8 @@ st.markdown(
             word-break: break-word;
         }
 
-        /* 6. SECTION 1: Mobile Officer Scorecards */
+        /* 6. SECTION 1: Mobile Officer Scorecards (Full Page Height — No Inner Scroll) */
         .scorecard-list-wrapper {
-            max-height: 470px;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
-            padding-right: 2px;
             margin-bottom: 0.5rem;
         }
         .officer-scorecard {
@@ -343,12 +346,8 @@ st.markdown(
             height: 100%;
         }
 
-        /* 7. SECTION 2: Mobile Work Dossier Cards (Zero Horizontal Scroll) */
+        /* 7. SECTION 2: Mobile Work Dossier Cards (Full Page Height — No Inner Scroll) */
         .work-cards-wrapper {
-            max-height: 580px;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
-            padding-right: 2px;
             margin-top: 0.35rem;
             margin-bottom: 0.6rem;
         }
@@ -439,10 +438,8 @@ st.markdown(
             color: #FCA5A5;
         }
 
-        /* Fallback Compact Table CSS */
+        /* Fallback Compact Table CSS (Horizontal Scroll Only) */
         .ce-table-wrapper {
-            max-height: 500px;
-            overflow-y: auto;
             overflow-x: auto;
             -webkit-overflow-scrolling: touch;
             border: 1px solid rgba(148, 163, 184, 0.22);
@@ -458,9 +455,6 @@ st.markdown(
             color: #E2E8F0;
         }
         table.ce-overdue-table thead th {
-            position: sticky;
-            top: 0;
-            z-index: 10;
             background: #273346;
             color: #F1F5F9;
             font-weight: 700;
@@ -512,6 +506,47 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+
+# -----------------------------------------------------------------------------
+# PREVENT MOBILE VIRTUAL KEYBOARD FROM POPPING UP ON DROPDOWN TAP
+# -----------------------------------------------------------------------------
+def disable_mobile_select_keyboard():
+    """Locks internal selectbox inputs to readonly/inputmode=none so tapping a dropdown never triggers the phone keyboard."""
+    components.html(
+        """
+        <script>
+        (function() {
+            const parentDoc = window.parent.document;
+
+            function lockSelectInputs() {
+                const inputs = parentDoc.querySelectorAll('div[data-baseweb="select"] input');
+                inputs.forEach(input => {
+                    if (!input.hasAttribute('readonly')) {
+                        input.setAttribute('readonly', 'readonly');
+                    }
+                    if (input.getAttribute('inputmode') !== 'none') {
+                        input.setAttribute('inputmode', 'none');
+                    }
+                });
+            }
+
+            lockSelectInputs();
+
+            if (!window.parent.__miSelectKeyboardObserver) {
+                const observer = new MutationObserver(() => {
+                    lockSelectInputs();
+                });
+                observer.observe(parentDoc.body, { childList: true, subtree: true });
+                window.parent.__miSelectKeyboardObserver = observer;
+            }
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
 
 # -----------------------------------------------------------------------------
 # CONSTANTS & TARGET SHEETS
@@ -569,15 +604,15 @@ DEFAULT_SHEET_URL = st.secrets.get(
     "https://docs.google.com/spreadsheets/d/13W04z-fdU3RhuVJ5vQFRpK4BBSQRJWfscPqpr7Oj2Y8/edit?gid=1055199869#gid=1055199869",
 )
 
-SCHEMA_VERSION = "v13_ce_mobile_clean"
-DISK_BACKUP_FILE = "/tmp/mi_overdue_shared_snapshot_v13_mob.pkl"
+SCHEMA_VERSION = "v14_ce_mobile_fullpage"
+DISK_BACKUP_FILE = "/tmp/mi_overdue_shared_snapshot_v14_mob.pkl"
 
 
 # -----------------------------------------------------------------------------
 # SHARED SERVER MEMORY & LOCK
 # -----------------------------------------------------------------------------
 @st.cache_resource
-def get_shared_state_v13_mob() -> dict:
+def get_shared_state_v14_mob() -> dict:
     state = {
         "version": SCHEMA_VERSION,
         "lock": threading.Lock(),
@@ -1536,7 +1571,7 @@ show_unassigned_bar = st.sidebar.checkbox(
 )
 
 # -----------------------------------------------------------------------------
-# MOBILE HEADER (STRICTLY 1 LINE) & DATA LOAD
+# MOBILE HEADER (STRICTLY 1 LINE, STEPPED UP 1 SIZE) & DATA LOAD
 # -----------------------------------------------------------------------------
 st.markdown(
     """
@@ -1548,7 +1583,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-shared_state = get_shared_state_v13_mob()
+shared_state = get_shared_state_v14_mob()
 
 needs_fresh_load = (
     shared_state["data"] is None
@@ -1813,7 +1848,7 @@ st.markdown(
 )
 
 # =============================================================================
-# SECTION 1: OFFICER OVERDUE SCORECARDS
+# SECTION 1: OFFICER OVERDUE SCORECARDS (FULL HEIGHT — NO INNER SCROLLER)
 # =============================================================================
 st.markdown(
     f"""
@@ -1853,9 +1888,7 @@ else:
     if display_scorecard_df.empty:
         st.warning(f"No {view_choice} found matching '{search_officer_query}'.")
     else:
-        st.caption(
-            f"Showing **{len(display_scorecard_df)}** {view_choice}(s) — swipe inside the box below to view all:"
-        )
+        st.caption(f"Showing **{len(display_scorecard_df)}** {view_choice}(s):")
         st.markdown(
             render_mobile_officer_scorecards(display_scorecard_df, view_choice),
             unsafe_allow_html=True,
@@ -1864,7 +1897,7 @@ else:
 st.divider()
 
 # =============================================================================
-# SECTION 2: COMBINED OVERDUE WORKS (MOBILE DOSSIER CARDS - NO HORIZONTAL SCROLL)
+# SECTION 2: COMBINED OVERDUE WORKS (FULL HEIGHT — NO INNER SCROLLER)
 # =============================================================================
 st.markdown(
     f"""
@@ -2048,3 +2081,6 @@ with st.expander("🔍 Inspect Worksheet Loading Status & Quick Sync (23 Target 
                 )
                 st.rerun()
     st.dataframe(diag_df, use_container_width=True)
+
+# Prevent mobile virtual keyboard from appearing when tapping any dropdown
+disable_mobile_select_keyboard()
