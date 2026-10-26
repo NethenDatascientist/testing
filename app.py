@@ -11,7 +11,6 @@ from zoneinfo import ZoneInfo
 
 import openpyxl
 import pandas as pd
-import plotly.graph_objects as go
 import requests
 import streamlit as st
 import streamlit.components.v1 as components
@@ -29,18 +28,23 @@ st.set_page_config(
 st.markdown(
     """
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
         header[data-testid="stHeader"] {
             background: transparent !important;
         }
+        .stApp {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+        }
         .block-container {
-            max-width: 680px !important;
+            max-width: 640px !important;
             padding-left: 0.65rem !important;
-            padding-right: 0.85rem !important;
-            padding-top: 3.4rem !important;
+            padding-right: 0.80rem !important;
+            padding-top: 2.2rem !important;
             padding-bottom: 2.5rem !important;
         }
 
-        /* Compact Mobile Sidebar (200px) & Always-Visible Toggle Button */
+        /* 1. Compact Mobile Sidebar (200px) & Always-Visible Toggle Button */
         section[data-testid="stSidebar"][aria-expanded="true"] {
             width: 200px !important;
             min-width: 200px !important;
@@ -71,24 +75,51 @@ st.markdown(
             min-height: 34px !important;
         }
 
-        /* Mobile Title & Status Banner */
-        .mobile-title {
-            font-size: 1.22rem;
-            font-weight: 800;
-            line-height: 1.3;
-            margin-bottom: 0.35rem;
+        /* 2. Clean Borderless Mobile Header */
+        .premium-compact-header {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            padding: 0.25rem 0;
+            margin-top: 0.2rem;
+            margin-bottom: 0.45rem;
+            background: transparent;
+            border: none;
         }
+        .premium-icon-wrapper {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(59, 130, 246, 0.15);
+            border: 1px solid rgba(59, 130, 246, 0.35);
+            border-radius: 8px;
+            width: 34px;
+            height: 34px;
+            font-size: 1.15rem;
+            flex-shrink: 0;
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.25);
+        }
+        .premium-compact-title {
+            font-size: 1.18rem;
+            font-weight: 800;
+            color: #F8FAFC;
+            margin: 0;
+            line-height: 1.2;
+            letter-spacing: -0.2px;
+        }
+
+        /* Status Bar */
         .mi-status-bar {
             display: flex;
             flex-wrap: wrap;
             align-items: center;
-            gap: 0.35rem 0.65rem;
+            gap: 0.35rem 0.6rem;
             padding: 0.38rem 0.65rem;
-            margin-bottom: 0.65rem;
+            margin-bottom: 0.6rem;
             border-radius: 10px;
             background: rgba(30, 41, 59, 0.45);
             border: 1px solid rgba(148, 163, 184, 0.14);
-            font-size: 0.74rem;
+            font-size: 0.73rem;
             color: #CBD5E1;
         }
         .mi-status-pill {
@@ -101,81 +132,310 @@ st.markdown(
             border: 1px solid rgba(59, 130, 246, 0.35);
             color: #93C5FD;
             font-weight: 600;
-            font-size: 0.72rem;
+            font-size: 0.71rem;
         }
 
-        /* Spaced Bordered Control Cards on Mobile */
+        /* 3. Control Cards */
         div[data-testid="stVerticalBlockBorderWrapper"] {
             border-radius: 12px !important;
-            padding: 0.35rem 0.5rem !important;
+            padding: 0.4rem 0.55rem !important;
             margin-bottom: 0.45rem !important;
             background: linear-gradient(145deg, rgba(30, 41, 59, 0.48), rgba(15, 23, 42, 0.68)) !important;
             border: 1px solid rgba(148, 163, 184, 0.18) !important;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
         }
 
-        /* 2x2 Responsive KPI Grid with Reddish & Greenish Layers */
-        .kpi-grid {
+        /* 4. 5-Box Mobile KPI Grid (Matching PC Colors: Blue, Violet, Cyan, Red, Green) */
+        .kpi-mobile-top-row {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 7px;
             margin-top: 6px;
-            margin-bottom: 8px;
+            margin-bottom: 7px;
         }
-        .kpi-card {
-            background: linear-gradient(145deg, rgba(30, 41, 59, 0.55), rgba(15, 23, 42, 0.82));
-            border: 1px solid rgba(148, 163, 184, 0.20);
+        .kpi-mobile-bottom-row {
+            display: grid;
+            grid-template-columns: 1.15fr 0.85fr;
+            gap: 7px;
+            margin-bottom: 10px;
+        }
+        .kpi-m-card {
+            border-radius: 11px;
+            padding: 8px 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.22);
+            transition: transform 0.18s ease;
+        }
+        .kpi-m-card:active {
+            transform: scale(0.98);
+        }
+        .kpi-blue {
+            border: 1px solid rgba(59, 130, 246, 0.25);
             border-top: 3px solid #3B82F6;
-            border-radius: 10px;
-            padding: 9px 11px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            background: linear-gradient(145deg, rgba(30, 58, 138, 0.40), rgba(15, 23, 42, 0.88));
         }
-        .kpi-card-red {
-            background: linear-gradient(145deg, rgba(127, 29, 29, 0.38), rgba(15, 23, 42, 0.85));
+        .kpi-violet {
+            border: 1px solid rgba(139, 92, 246, 0.25);
+            border-top: 3px solid #8B5CF6;
+            background: linear-gradient(145deg, rgba(88, 28, 135, 0.38), rgba(15, 23, 42, 0.88));
+        }
+        .kpi-cyan {
+            border: 1px solid rgba(6, 182, 212, 0.25);
+            border-top: 3px solid #06B6D4;
+            background: linear-gradient(145deg, rgba(22, 78, 99, 0.42), rgba(15, 23, 42, 0.88));
+        }
+        .kpi-red {
             border: 1px solid rgba(239, 68, 68, 0.30);
             border-top: 3px solid #EF4444;
-            border-radius: 10px;
-            padding: 9px 11px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            background: linear-gradient(145deg, rgba(127, 29, 29, 0.42), rgba(15, 23, 42, 0.90));
         }
-        .kpi-card-green {
-            background: linear-gradient(145deg, rgba(6, 78, 59, 0.38), rgba(15, 23, 42, 0.85));
+        .kpi-green {
             border: 1px solid rgba(74, 222, 128, 0.28);
             border-top: 3px solid #4ADE80;
-            border-radius: 10px;
-            padding: 9px 11px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            background: linear-gradient(145deg, rgba(6, 78, 59, 0.40), rgba(15, 23, 42, 0.90));
         }
-        .kpi-label {
-            font-size: 0.73rem;
+        .kpi-m-label {
+            font-size: 0.69rem;
             font-weight: 600;
             color: #CBD5E1;
             margin-bottom: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
-        .kpi-val {
-            font-size: 1.18rem;
+        .kpi-m-val {
+            font-size: 1.08rem;
             font-weight: 800;
             line-height: 1.2;
             color: #F8FAFC;
         }
 
-        /* Legend Pill Bar */
-        .legend-bar {
+        /* 5. Section Header Banners */
+        .exec-section-banner {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            padding: 0.55rem 0.75rem;
+            margin-top: 0.25rem;
+            margin-bottom: 0.6rem;
+            border-radius: 10px;
+            background: rgba(15, 23, 42, 0.65);
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            border-left: 4px solid #3B82F6;
+        }
+        .exec-section-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #F8FAFC;
+            line-height: 1.25;
+        }
+        .exec-scope-badge {
+            font-size: 0.70rem;
+            font-weight: 600;
+            padding: 0.2rem 0.55rem;
+            border-radius: 6px;
+            background: rgba(59, 130, 246, 0.12);
+            border: 1px solid rgba(96, 165, 250, 0.28);
+            color: #93C5FD;
+            line-height: 1.35;
+            word-break: break-word;
+        }
+
+        /* 6. SECTION 1: Mobile Officer Scorecards (Replaces cramped bar chart) */
+        .scorecard-list-wrapper {
+            max-height: 470px;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding-right: 2px;
+            margin-bottom: 0.5rem;
+        }
+        .officer-scorecard {
+            background: linear-gradient(145deg, rgba(30, 41, 59, 0.52), rgba(15, 23, 42, 0.85));
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            border-radius: 11px;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+        }
+        .officer-scorecard-unassigned {
+            background: linear-gradient(145deg, rgba(69, 26, 3, 0.35), rgba(15, 23, 42, 0.88));
+            border: 1px solid rgba(251, 191, 36, 0.32);
+        }
+        .sc-top-row {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 7px;
+        }
+        .sc-name-group {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            min-width: 0;
+        }
+        .sc-rank-badge {
+            background: rgba(59, 130, 246, 0.18);
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            color: #93C5FD;
+            font-size: 0.72rem;
+            font-weight: 800;
+            padding: 2px 6px;
+            border-radius: 6px;
+            flex-shrink: 0;
+        }
+        .sc-officer-name {
+            font-size: 0.90rem;
+            font-weight: 700;
+            color: #F8FAFC;
+            line-height: 1.3;
+            word-break: break-word;
+        }
+        .sc-overdue-main-pill {
+            background: rgba(239, 68, 68, 0.18);
+            border: 1px solid rgba(239, 68, 68, 0.45);
+            color: #FCA5A5;
+            font-size: 0.78rem;
+            font-weight: 800;
+            padding: 3px 8px;
+            border-radius: 999px;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .sc-metrics-row {
             display: flex;
             flex-wrap: wrap;
-            gap: 10px;
+            align-items: center;
+            gap: 6px 10px;
             font-size: 0.75rem;
-            font-weight: 600;
-            margin: 4px 0 4px 0;
-            padding: 6px 10px;
-            background: rgba(148, 163, 184, 0.08);
-            border-radius: 8px;
+            color: #CBD5E1;
+            margin-bottom: 7px;
         }
-        .dot-red { color: #EF4444; }
-        .dot-green { color: #4ADE80; }
-        .dot-grey { color: #94A3B8; }
+        .sc-pill-ets {
+            color: #4ADE80;
+            font-weight: 700;
+        }
+        .sc-pill-rest {
+            color: #94A3B8;
+            font-weight: 600;
+        }
+        .sc-pill-total {
+            color: #38BDF8;
+            font-weight: 700;
+        }
+        .sc-bar-track {
+            width: 100%;
+            height: 6px;
+            background: rgba(148, 163, 184, 0.20);
+            border-radius: 999px;
+            overflow: hidden;
+            display: flex;
+        }
+        .sc-bar-od {
+            background: #EF4444;
+            height: 100%;
+        }
+        .sc-bar-ets {
+            background: #4ADE80;
+            height: 100%;
+        }
 
-        /* CE-Friendly Mobile Overdue Table (Elevated Dark Header + Compact Work Name) */
+        /* 7. SECTION 2: Mobile Work Dossier Cards (Zero Horizontal Scroll) */
+        .work-cards-wrapper {
+            max-height: 580px;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding-right: 2px;
+            margin-top: 0.35rem;
+            margin-bottom: 0.6rem;
+        }
+        .mobile-work-card {
+            background: linear-gradient(155deg, rgba(30, 41, 59, 0.58), rgba(15, 23, 42, 0.90));
+            border: 1px solid rgba(148, 163, 184, 0.22);
+            border-top: 3px solid #EF4444;
+            border-radius: 12px;
+            padding: 11px 12px;
+            margin-bottom: 10px;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+        }
+        .mwc-top-bar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+        .mwc-sl-badge {
+            background: rgba(148, 163, 184, 0.16);
+            color: #E2E8F0;
+            font-size: 0.74rem;
+            font-weight: 800;
+            padding: 2px 8px;
+            border-radius: 6px;
+        }
+        .mwc-hoa-badge {
+            background: rgba(59, 130, 246, 0.16);
+            border: 1px solid rgba(59, 130, 246, 0.38);
+            color: #93C5FD;
+            font-size: 0.73rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 6px;
+        }
+        .mwc-overdue-by-badge {
+            background: rgba(239, 68, 68, 0.16);
+            border: 1px solid rgba(239, 68, 68, 0.42);
+            color: #FCA5A5;
+            font-size: 0.74rem;
+            font-weight: 800;
+            padding: 2px 8px;
+            border-radius: 6px;
+        }
+        .mwc-work-title {
+            font-size: 0.88rem;
+            font-weight: 700;
+            color: #F8FAFC;
+            line-height: 1.42;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+            white-space: normal;
+            word-wrap: break-word;
+        }
+        .mwc-meta-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 7px 10px;
+            font-size: 0.75rem;
+        }
+        .mwc-meta-item {
+            background: rgba(15, 23, 42, 0.55);
+            border: 1px solid rgba(148, 163, 184, 0.12);
+            border-radius: 8px;
+            padding: 5px 8px;
+            min-width: 0;
+        }
+        .mwc-meta-label {
+            font-size: 0.67rem;
+            font-weight: 600;
+            color: #94A3B8;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            margin-bottom: 1px;
+        }
+        .mwc-meta-val {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: #E2E8F0;
+            word-break: break-word;
+        }
+        .mwc-meta-val-red {
+            font-size: 0.79rem;
+            font-weight: 800;
+            color: #FCA5A5;
+        }
+
+        /* Fallback Compact Table CSS */
         .ce-table-wrapper {
             max-height: 500px;
             overflow-y: auto;
@@ -184,7 +444,6 @@ st.markdown(
             border: 1px solid rgba(148, 163, 184, 0.22);
             border-radius: 12px;
             background: rgba(15, 23, 42, 0.78);
-            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
             margin-top: 0.35rem;
             margin-bottom: 0.75rem;
         }
@@ -205,30 +464,22 @@ st.markdown(
             padding: 9px 8px;
             border-bottom: 2px solid #3B82F6;
             white-space: nowrap;
-            font-size: 0.76rem;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
         }
         table.ce-overdue-table tbody tr {
             border-bottom: 1px solid rgba(148, 163, 184, 0.12);
         }
-        table.ce-overdue-table tbody tr:nth-child(even) {
-            background: rgba(30, 41, 59, 0.32);
-        }
         table.ce-overdue-table td {
             padding: 7px 8px;
             vertical-align: middle;
-            line-height: 1.32;
         }
-        /* Compact Work Name on Mobile (25% reduced width + 3-line clamp) */
         .ce-work-name-cell {
-            width: 25%;
-            min-width: 210px;
-            max-width: 260px;
+            min-width: 220px;
+            max-width: 280px;
             white-space: normal;
         }
         .ce-work-name-clamp {
             display: block;
-            line-height: 1.32;
+            line-height: 1.35;
             font-weight: 600;
             color: #F8FAFC;
             white-space: normal;
@@ -236,31 +487,22 @@ st.markdown(
         }
         .ce-compact-cell {
             white-space: nowrap;
-            font-size: 0.77rem;
         }
         .ce-date-overdue {
             color: #FCA5A5;
             font-weight: 700;
             white-space: nowrap;
-            font-size: 0.77rem;
         }
         .ce-sl-cell {
             text-align: center;
             font-weight: 600;
             color: #94A3B8;
-            width: 36px;
         }
 
-        div[role="radiogroup"] {
-            gap: 0.5rem !important;
-        }
         hr {
-            margin-top: 0.45rem !important;
-            margin-bottom: 0.5rem !important;
+            margin-top: 0.5rem !important;
+            margin-bottom: 0.55rem !important;
             border-color: rgba(148, 163, 184, 0.15) !important;
-        }
-        [data-testid="stPlotlyChart"] {
-            width: 100% !important;
         }
     </style>
     """,
@@ -269,7 +511,7 @@ st.markdown(
 
 
 # -----------------------------------------------------------------------------
-# ULTRA-SLIM (14px), TEXT-FREE RIGHT-EDGE SCROLLER (WITH RELOAD FIX)
+# ULTRA-SLIM (14px), TEXT-FREE RIGHT-EDGE SCROLLER
 # -----------------------------------------------------------------------------
 def inject_scroll_hud_graphics(enabled: bool = True):
     components.html(
@@ -280,7 +522,6 @@ def inject_scroll_hud_graphics(enabled: bool = True):
             const parentWin = window.parent;
             const isEnabled = {str(enabled).lower()};
 
-            // 1. CLEANUP PREVIOUS RUN (Prevents freeze after Sync/Reload)
             if (parentWin.__miScrollHudRAF) {{
                 parentWin.cancelAnimationFrame(parentWin.__miScrollHudRAF);
             }}
@@ -294,13 +535,8 @@ def inject_scroll_hud_graphics(enabled: bool = True):
             const oldStyle = parentDoc.getElementById("mi-scroll-hud-style");
             if (oldStyle) oldStyle.remove();
 
-            parentDoc.querySelectorAll(
-                "#mi-scroll-hud-active-topic, .mi-hud-section-Node, #mi-scroll-hud-crosshair"
-            ).forEach(el => el.remove());
-
             if (!isEnabled) return;
 
-            // 2. INJECT CSS
             const style = parentDoc.createElement("style");
             style.id = "mi-scroll-hud-style";
             style.innerHTML = `
@@ -315,13 +551,9 @@ def inject_scroll_hud_graphics(enabled: bool = True):
                     z-index: 999990 !important;
                     pointer-events: none !important;
                     user-select: none !important;
-                    overflow: visible !important;
                     background: transparent !important;
-                    border: none !important;
-                    box-shadow: none !important;
                     font-family: 'JetBrains Mono', monospace !important;
                 }}
-
                 #mi-scroll-hud-track {{
                     position: absolute !important;
                     top: 0 !important;
@@ -329,10 +561,7 @@ def inject_scroll_hud_graphics(enabled: bool = True):
                     width: 14px !important;
                     height: 100vh !important;
                     overflow: hidden !important;
-                    pointer-events: none !important;
-                    background: transparent !important;
                 }}
-
                 #mi-scroll-hud-ticks-inner {{
                     position: absolute !important;
                     top: 0 !important;
@@ -340,7 +569,6 @@ def inject_scroll_hud_graphics(enabled: bool = True):
                     width: 100% !important;
                     will-change: transform;
                 }}
-
                 .mi-hud-tick {{
                     position: absolute;
                     right: 0;
@@ -349,45 +577,36 @@ def inject_scroll_hud_graphics(enabled: bool = True):
                     justify-content: flex-end;
                     transform: translateY(-50%);
                 }}
-
                 .mi-hud-tick-label {{
                     font-size: 7px;
                     font-weight: 600;
                     color: rgba(226, 232, 240, 0.42);
                     margin-right: 1.5px;
-                    letter-spacing: -0.2px;
-                    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
                 }}
-
                 .mi-hud-tick-line-major {{
                     width: 4px;
                     height: 1.2px;
                     background: rgba(226, 232, 240, 0.50);
                 }}
-
                 .mi-hud-tick-line-mid {{
                     width: 2.5px;
                     height: 1px;
                     background: rgba(226, 232, 240, 0.24);
                 }}
-
                 #mi-scroll-hud-indicator {{
                     position: absolute;
                     right: 0;
                     width: 14px;
                     top: 50%;
                     transform: translateY(-1px);
-                    pointer-events: none;
                     z-index: 6;
                 }}
-
                 #mi-scroll-hud-blue-line {{
                     width: 14px;
                     height: 2px;
                     background: linear-gradient(90deg, rgba(59, 130, 246, 0.2) 0%, #3B82F6 45%, #93C5FD 100%);
                     box-shadow: 0 0 6px rgba(59, 130, 246, 0.95);
                 }}
-
                 #mi-scroll-hud-pct {{
                     margin-top: 2px;
                     padding-right: 1px;
@@ -395,14 +614,11 @@ def inject_scroll_hud_graphics(enabled: bool = True):
                     font-size: 7px;
                     font-weight: 700;
                     color: #93C5FD;
-                    white-space: nowrap;
-                    text-shadow: 0 0 5px rgba(59, 130, 246, 0.95), 0 1px 2px rgba(0, 0, 0, 0.95);
                 }}
             `;
             parentDoc.head.appendChild(style);
 
             const PX_PER_UNIT = 38;
-
             const hudRoot = parentDoc.createElement("div");
             hudRoot.id = "mi-scroll-hud-root";
 
@@ -410,44 +626,23 @@ def inject_scroll_hud_graphics(enabled: bool = True):
             for (let step = -20; step <= 220; step++) {{
                 const unitVal = step * 0.5;
                 const yPos = unitVal * PX_PER_UNIT;
-
                 if (step % 10 === 0 && unitVal >= 0 && unitVal <= 100) {{
-                    ticksHtml += `
-                        <div class="mi-hud-tick" style="top: ${{yPos}}px;">
-                            <span class="mi-hud-tick-label">${{unitVal}}</span>
-                            <div class="mi-hud-tick-line-major"></div>
-                        </div>
-                    `;
+                    ticksHtml += `<div class="mi-hud-tick" style="top: ${{yPos}}px;"><span class="mi-hud-tick-label">${{unitVal}}</span><div class="mi-hud-tick-line-major"></div></div>`;
                 }} else if (step % 5 === 0) {{
-                    ticksHtml += `
-                        <div class="mi-hud-tick" style="top: ${{yPos}}px;">
-                            <div class="mi-hud-tick-line-mid"></div>
-                        </div>
-                    `;
+                    ticksHtml += `<div class="mi-hud-tick" style="top: ${{yPos}}px;"><div class="mi-hud-tick-line-mid"></div></div>`;
                 }}
             }}
 
             hudRoot.innerHTML = `
-                <div id="mi-scroll-hud-track">
-                    <div id="mi-scroll-hud-ticks-inner">${{ticksHtml}}</div>
-                </div>
-                <div id="mi-scroll-hud-indicator">
-                    <div id="mi-scroll-hud-blue-line"></div>
-                    <div id="mi-scroll-hud-pct">0%</div>
-                </div>
+                <div id="mi-scroll-hud-track"><div id="mi-scroll-hud-ticks-inner">${{ticksHtml}}</div></div>
+                <div id="mi-scroll-hud-indicator"><div id="mi-scroll-hud-blue-line"></div><div id="mi-scroll-hud-pct">0%</div></div>
             `;
             parentDoc.body.appendChild(hudRoot);
 
-            // 3. RE-BIND SCROLL EVENT LISTENER
             parentWin.__miActiveScroller = null;
             parentWin.__miScrollHandler = function(e) {{
                 const t = e.target;
-                if (
-                    t &&
-                    t !== parentDoc &&
-                    t.scrollHeight > t.clientHeight + 20 &&
-                    t.clientHeight > parentWin.innerHeight * 0.45
-                ) {{
+                if (t && t !== parentDoc && t.scrollHeight > t.clientHeight + 20 && t.clientHeight > parentWin.innerHeight * 0.45) {{
                     parentWin.__miActiveScroller = t;
                 }}
             }};
@@ -455,67 +650,26 @@ def inject_scroll_hud_graphics(enabled: bool = True):
 
             function findScrollElement() {{
                 const activeScroller = parentWin.__miActiveScroller;
-                if (
-                    activeScroller &&
-                    parentDoc.body.contains(activeScroller) &&
-                    activeScroller.scrollHeight > activeScroller.clientHeight + 10
-                ) {{
+                if (activeScroller && parentDoc.body.contains(activeScroller) && activeScroller.scrollHeight > activeScroller.clientHeight + 10) {{
                     return activeScroller;
                 }}
-
-                const selectors = [
-                    '[data-testid="stMain"]',
-                    '[data-testid="stAppViewContainer"]',
-                    'section.main',
-                    '.main',
-                    '[data-testid="stApp"]'
-                ];
-
-                let bestCandidate = null;
-                let bestRange = 0;
-
+                const selectors = ['[data-testid="stMain"]', '[data-testid="stAppViewContainer"]', 'section.main', '.main', '[data-testid="stApp"]'];
                 for (const sel of selectors) {{
                     const el = parentDoc.querySelector(sel);
-                    if (!el) continue;
-                    const range = el.scrollHeight - el.clientHeight;
-                    if (range > 10) {{
-                        if (el.scrollTop > 0) {{
-                            parentWin.__miActiveScroller = el;
-                            return el;
-                        }}
-                        const st = parentWin.getComputedStyle(el);
-                        if (
-                            (st.overflowY === "auto" || st.overflowY === "scroll" || st.overflow === "auto") &&
-                            range > bestRange
-                        ) {{
-                            bestRange = range;
-                            bestCandidate = el;
-                        }}
-                    }}
+                    if (el && el.scrollHeight - el.clientHeight > 10) return el;
                 }}
-
-                if (bestCandidate) return bestCandidate;
                 return parentDoc.scrollingElement || parentDoc.documentElement;
             }}
 
             function getScrollPercentage() {{
-                const winY = parentWin.scrollY || parentWin.pageYOffset || 0;
-                const docEl = parentDoc.scrollingElement || parentDoc.documentElement;
-                if (winY > 0 && docEl && docEl.scrollHeight > docEl.clientHeight) {{
-                    return Math.max(0, Math.min(100, (winY / (docEl.scrollHeight - docEl.clientHeight)) * 100));
-                }}
-
                 const el = findScrollElement();
                 if (!el) return 0;
                 const maxScroll = Math.max(1, el.scrollHeight - el.clientHeight);
-                const pct = (el.scrollTop / maxScroll) * 100;
-                return Math.max(0, Math.min(100, pct));
+                return Math.max(0, Math.min(100, (el.scrollTop / maxScroll) * 100));
             }}
 
-            // 4. RE-BIND ANIMATION LOOP
             parentWin.__miCurrentPct = parentWin.__miCurrentPct || 0;
-
-            parentWin.__miHudStepFn = function() {{
+            function loop() {{
                 const root = parentDoc.getElementById("mi-scroll-hud-root");
                 const inner = parentDoc.getElementById("mi-scroll-hud-ticks-inner");
                 const indicator = parentDoc.getElementById("mi-scroll-hud-indicator");
@@ -524,26 +678,15 @@ def inject_scroll_hud_graphics(enabled: bool = True):
                 if (root && inner && indicator && pctLabel) {{
                     const targetPct = getScrollPercentage();
                     parentWin.__miCurrentPct += (targetPct - parentWin.__miCurrentPct) * 0.18;
-
                     const vh = root.clientHeight;
                     const indicatorY = vh * (0.24 + 0.52 * (parentWin.__miCurrentPct / 100.0));
                     indicator.style.top = `${{indicatorY.toFixed(2)}}px`;
-
                     const trackY = indicatorY - (parentWin.__miCurrentPct * PX_PER_UNIT);
                     inner.style.transform = `translate3d(0, ${{trackY.toFixed(2)}}px, 0)`;
-
-                    const displayNum = Math.round(parentWin.__miCurrentPct);
-                    pctLabel.textContent = `${{displayNum}}%`;
-                }}
-            }};
-
-            function loop() {{
-                if (parentWin.__miHudStepFn) {{
-                    parentWin.__miHudStepFn();
+                    pctLabel.textContent = `${{Math.round(parentWin.__miCurrentPct)}}%`;
                 }}
                 parentWin.__miScrollHudRAF = parentWin.requestAnimationFrame(loop);
             }}
-
             parentWin.__miScrollHudRAF = parentWin.requestAnimationFrame(loop);
         }})();
         </script>
@@ -591,7 +734,6 @@ COL_START_DATE_KN = "ಕಾಮಗಾರಿ ಪ್ರಾರಂಭಿಸಿದ ದ
 COL_TARGET_DATE_KN = "ಕಾಮಗಾರಿ ಮುಕ್ತಾಯಗೊಳಿಸಬೇಕಾದ ದಿನಾಂಕ"
 COL_ACTUAL_DATE_KN = "ಮುಕ್ತಾಯವಾದ ದಿನಾಂಕ"
 COL_HOA_KN = "ಲೆಕ್ಕಶೀರ್ಷಿಕೆ"
-COL_STATUS_STD = "CP/CF/P/TBS/TP/ETS/OTH"
 
 LABEL_DIV_EN = "Division"
 LABEL_SUBDIV_EN = "Sub-division"
@@ -605,23 +747,20 @@ ALL_OPTION = "ALL"
 UNSPECIFIED_LABEL = "Not Specified (Empty)"
 UNASSIGNED_LABEL = "Unassigned (Empty)"
 
-BAR_SHRINK_THRESHOLD = 250
-BAR_SHRINK_MAX_EXTRA = 18.0
-
 DEFAULT_SHEET_URL = st.secrets.get(
     "SHEET_URL",
     "https://docs.google.com/spreadsheets/d/13W04z-fdU3RhuVJ5vQFRpK4BBSQRJWfscPqpr7Oj2Y8/edit?gid=1055199869#gid=1055199869",
 )
 
-SCHEMA_VERSION = "v11_ce_overdue_dashboard"
-DISK_BACKUP_FILE = "/tmp/mi_overdue_shared_snapshot_v11.pkl"
+SCHEMA_VERSION = "v12_ce_mobile_portrait_cards"
+DISK_BACKUP_FILE = "/tmp/mi_overdue_shared_snapshot_v12_mob.pkl"
 
 
 # -----------------------------------------------------------------------------
 # SHARED SERVER MEMORY & LOCK
 # -----------------------------------------------------------------------------
 @st.cache_resource
-def get_shared_state_v11() -> dict:
+def get_shared_state_v12_mob() -> dict:
     state = {
         "version": SCHEMA_VERSION,
         "lock": threading.Lock(),
@@ -687,15 +826,6 @@ def calc_overdue_duration(target_date_obj, current_date_obj) -> str:
         parts.append(f"{d} day{'s' if d > 1 else ''}")
 
     return "(" + ", ".join(parts) + ")" if parts else "(0 days)"
-
-
-def compress_bar_length(val: float, threshold: int = BAR_SHRINK_THRESHOLD) -> float:
-    v = float(val)
-    t = float(threshold)
-    if v <= t:
-        return v
-    excess = v - t
-    return t + BAR_SHRINK_MAX_EXTRA * (excess / (excess + 120.0))
 
 
 def to_safe_python_date(val):
@@ -1068,18 +1198,112 @@ def map_officer_or_unassigned(name: str) -> str:
     return name
 
 
-def shorten_mobile_label(name: str, max_len: int = 15) -> str:
-    """Shorten Y-axis officer names on portrait phones so bars have maximum width."""
-    if name == UNASSIGNED_LABEL:
-        return "⚠️ Unassigned"
-    clean = re.sub(r"^(ಶ್ರೀ|ಶ್ರೀಮತಿ|ಕುಮಾರಿ)\.?\s*", "", name).strip()
-    return clean if len(clean) <= max_len else clean[: max_len - 1] + "…"
-
-
 def display_clean_cell(val: str) -> str:
     if not val or val in {UNSPECIFIED_LABEL, UNASSIGNED_LABEL}:
         return "-"
     return val
+
+
+# -----------------------------------------------------------------------------
+# MOBILE RENDERERS: 1) OFFICER SCORECARDS & 2) WORK DOSSIER CARDS
+# -----------------------------------------------------------------------------
+def render_mobile_officer_scorecards(df_source: pd.DataFrame, officer_col: str) -> str:
+    cards_html = []
+    rank_counter = 1
+
+    for _, row in df_source.iterrows():
+        raw_name = str(row[officer_col])
+        is_unassigned = bool(row["_is_unassigned"])
+        od_count = int(row["overdue_works"])
+        ets_count = int(row["ets_works"])
+        rest_count = int(row["rest_works"])
+        tot_count = max(int(row["total_works"]), 1)
+        od_pct = float(row["overdue_pct"])
+
+        od_bar_w = min(100.0, round((od_count / tot_count) * 100, 1))
+        ets_bar_w = min(100.0 - od_bar_w, round((ets_count / tot_count) * 100, 1))
+
+        if is_unassigned:
+            rank_badge = '<span class="sc-rank-badge" style="background:rgba(251,191,36,0.2);border-color:rgba(251,191,36,0.5);color:#FDE68A;">⚠️</span>'
+            card_cls = "officer-scorecard officer-scorecard-unassigned"
+        else:
+            rank_badge = f'<span class="sc-rank-badge">#{rank_counter}</span>'
+            card_cls = "officer-scorecard"
+            rank_counter += 1
+
+        esc_name = html.escape(raw_name)
+
+        card_item = (
+            f'<div class="{card_cls}">'
+            f'<div class="sc-top-row">'
+            f'<div class="sc-name-group">{rank_badge}<span class="sc-officer-name">{esc_name}</span></div>'
+            f'<span class="sc-overdue-main-pill">🔴 {od_count} Overdue ({od_pct:.1f}%)</span>'
+            f"</div>"
+            f'<div class="sc-metrics-row">'
+            f'<span class="sc-pill-ets">🟢 {ets_count} ETS</span>'
+            f"<span>•</span>"
+            f'<span class="sc-pill-rest">⚪ {rest_count} Rest</span>'
+            f"<span>•</span>"
+            f'<span class="sc-pill-total">📋 {int(row["total_works"])} Total Works</span>'
+            f"</div>"
+            f'<div class="sc-bar-track">'
+            f'<div class="sc-bar-od" style="width:{od_bar_w}%;"></div>'
+            f'<div class="sc-bar-ets" style="width:{ets_bar_w}%;"></div>'
+            f"</div>"
+            f"</div>"
+        )
+        cards_html.append(card_item)
+
+    return f'<div class="scorecard-list-wrapper">{"".join(cards_html)}</div>'
+
+
+def render_mobile_work_dossier_cards(
+    df_display: pd.DataFrame, opposite_officer_en: str
+) -> str:
+    cards_html = []
+
+    for _, row in df_display.iterrows():
+        sl_no = html.escape(str(row.get("Sl. No.", "-")))
+        work_name = html.escape(str(row.get("Work Name", "-") or "-"))
+        div_val = html.escape(str(row.get(LABEL_DIV_EN, "-") or "-"))
+        subdiv_val = html.escape(str(row.get(LABEL_SUBDIV_EN, "-") or "-"))
+        opp_val = html.escape(str(row.get(opposite_officer_en, "-") or "-"))
+        ee_val = html.escape(str(row.get(LABEL_EE_EN, "-") or "-"))
+        ta_val = html.escape(str(row.get(LABEL_TA_EN, "-") or "-"))
+        as_val = html.escape(str(row.get(LABEL_AS_EN, "-") or "-"))
+        start_val = html.escape(str(row.get("Start Date", "-") or "-"))
+        target_val = html.escape(str(row.get("Target Date", "-") or "-"))
+        overdue_by_val = html.escape(str(row.get("Overdue By", "-") or "-"))
+        hoa_val = html.escape(str(row.get("H.O.A.", "-") or "-"))
+
+        opp_short_label = (
+            "A.E.E."
+            if opposite_officer_en == LABEL_AEE_EN
+            else "A.E. / S.O."
+        )
+
+        card_html = (
+            f'<div class="mobile-work-card">'
+            f'<div class="mwc-top-bar">'
+            f'<div><span class="mwc-sl-badge">Sl. #{sl_no}</span> <span class="mwc-hoa-badge">📑 {hoa_val}</span></div>'
+            f'<span class="mwc-overdue-by-badge">⏳ {overdue_by_val}</span>'
+            f"</div>"
+            f'<div class="mwc-work-title">{work_name}</div>'
+            f'<div class="mwc-meta-grid">'
+            f'<div class="mwc-meta-item"><div class="mwc-meta-label">🚀 Start Date</div><div class="mwc-meta-val">{start_val}</div></div>'
+            f'<div class="mwc-meta-item"><div class="mwc-meta-label">🎯 Target Date</div><div class="mwc-meta-val-red">{target_val}</div></div>'
+            f'<div class="mwc-meta-item"><div class="mwc-meta-label">🏛️ Division</div><div class="mwc-meta-val">{div_val}</div></div>'
+            f'<div class="mwc-meta-item"><div class="mwc-meta-label">🏢 Sub-division</div><div class="mwc-meta-val">{subdiv_val}</div></div>'
+            f'<div class="mwc-meta-item"><div class="mwc-meta-label">👤 {html.escape(opp_short_label)}</div><div class="mwc-meta-val">{opp_val}</div></div>'
+            f'<div class="mwc-meta-item"><div class="mwc-meta-label">👔 Exec. Engineer</div><div class="mwc-meta-val">{ee_val}</div></div>'
+            f'<div class="mwc-meta-item"><div class="mwc-meta-label">🛠️ Tech. Assistant</div><div class="mwc-meta-val">{ta_val}</div></div>'
+            f'<div class="mwc-meta-item"><div class="mwc-meta-label">📑 Account Supt.</div><div class="mwc-meta-val">{as_val}</div></div>'
+            f"</div>"
+            f"</div>"
+        )
+        cards_html.append(card_html)
+
+    return f'<div class="work-cards-wrapper">{"".join(cards_html)}</div>'
 
 
 def render_ce_overdue_html_table(df_display: pd.DataFrame) -> str:
@@ -1096,7 +1320,7 @@ def render_ce_overdue_html_table(df_display: pd.DataFrame) -> str:
 
             if col == "Work Name":
                 cells_html.append(
-                    f'<td class="ce-work-name-cell" title="{escaped_text}">'
+                    f'<td class="ce-work-name-cell">'
                     f'<div class="ce-work-name-clamp">{escaped_text}</div>'
                     f"</td>"
                 )
@@ -1484,18 +1708,13 @@ denominator_mode = st.sidebar.radio(
     index=0,
 )
 
-shrink_outliers = st.sidebar.checkbox(
-    f"Shrink long bars above {BAR_SHRINK_THRESHOLD} works",
-    value=True,
-)
-
 hide_zero_overdue = st.sidebar.checkbox(
     "Show only officers with Overdue > 0",
     value=True,
 )
 
 show_unassigned_bar = st.sidebar.checkbox(
-    "Include Empty / Unassigned Officer bar at the bottom",
+    "Include Empty / Unassigned Officer card at the bottom",
     value=True,
 )
 
@@ -1508,11 +1727,30 @@ show_scroll_hud = st.sidebar.checkbox(
 # MOBILE HEADER & DATA LOAD
 # -----------------------------------------------------------------------------
 st.markdown(
-    '<div class="mobile-title">📊 Minor Irrigation — Overdue Works Dashboard</div>',
+    """
+    <div class="premium-compact-header">
+        <div class="premium-icon-wrapper">📊</div>
+        <h1 class="premium-compact-title">Minor Irrigation — Overdue Works Dashboard</h1>
+    </div>
+    """,
     unsafe_allow_html=True,
 )
 
-shared_state = get_shared_state_v11()
+shared_state = get_shared_state_v12_mob()
+
+needs_fresh_load = (
+    shared_state["data"] is None
+    or shared_state.get("version") != SCHEMA_VERSION
+    or sync_clicked
+)
+
+if not needs_fresh_load and shared_state["data"] is not None:
+    _, cached_od_df, _, _ = shared_state["data"]
+    if not cached_od_df.empty and (
+        "Overdue By" not in cached_od_df.columns
+        or COL_WORK_NAME_KN not in cached_od_df.columns
+    ):
+        needs_fresh_load = True
 
 if uploaded_xlsx is not None:
     file_id = f"{uploaded_xlsx.name}_{uploaded_xlsx.size}_{SCHEMA_VERSION}"
@@ -1524,32 +1762,23 @@ if uploaded_xlsx is not None:
             )
             st.session_state["_last_uploaded_id"] = file_id
 
-elif (
-    shared_state["data"] is None
-    or shared_state.get("version") != SCHEMA_VERSION
-    or sync_clicked
-):
+elif needs_fresh_load:
     with shared_state["lock"]:
-        if (
-            shared_state["data"] is None
-            or shared_state.get("version") != SCHEMA_VERSION
-            or sync_clicked
-        ):
-            with st.spinner("Loading 23 worksheets from Google Sheets..."):
-                try:
-                    xlsx_bytes = download_xlsx_bytes(sheet_url_input)
-                    parsed = parse_xlsx_workbook(xlsx_bytes)
-                    save_shared_state(
-                        shared_state, parsed, "Google Sheets Live Snapshot"
+        with st.spinner("Loading 23 worksheets from Google Sheets..."):
+            try:
+                xlsx_bytes = download_xlsx_bytes(sheet_url_input)
+                parsed = parse_xlsx_workbook(xlsx_bytes)
+                save_shared_state(
+                    shared_state, parsed, "Google Sheets Live Snapshot"
+                )
+            except Exception as e:
+                if shared_state["data"] is not None:
+                    st.warning(
+                        f"Google Sheets is busy ({e}). Showing snapshot from {shared_state['last_synced']}."
                     )
-                except Exception as e:
-                    if shared_state["data"] is not None:
-                        st.warning(
-                            f"Google Sheets is busy ({e}). Showing snapshot from {shared_state['last_synced']}."
-                        )
-                    else:
-                        st.error(f"Unable to load data right now. ({e})")
-                        st.stop()
+                else:
+                    st.error(f"Unable to load data right now. ({e})")
+                    st.stop()
 
 master_df, overdue_full_df, diag_df, today_str = shared_state["data"]
 
@@ -1557,7 +1786,6 @@ st.markdown(
     f"""
     <div class="mi-status-bar">
         <span class="mi-status-pill">⚡ {shared_state['source_label']}</span>
-        <span>📅 <b>Today:</b> {today_str}</span>
         <span>🕒 <b>Synced:</b> {shared_state['last_synced']} IST</span>
     </div>
     """,
@@ -1647,7 +1875,6 @@ filtered_master_df = (
     else df_step4.copy()
 )
 
-# Card 2: Officer View & Sort Order
 with st.container(border=True):
     view_choice = st.radio(
         "👤 Select Officer View:",
@@ -1656,7 +1883,7 @@ with st.container(border=True):
     )
 
     sort_choice = st.radio(
-        "⬇️ Sort Chart & Table By:",
+        "⬇️ Sort Officers By:",
         options=[
             "Highest Overdue Count at Top",
             "Highest Overdue Percentage (%) at Top",
@@ -1715,7 +1942,7 @@ else:
     ).reset_index(drop=True)
 
 # -----------------------------------------------------------------------------
-# 2x2 MOBILE PORTRAIT KPI GRID (RED/GREEN TINTS & DYNAMIC OFFICER COUNT)
+# 5-CARD COLOR-CODED MOBILE KPI GRID (BLUE, VIOLET, CYAN, RED, GREEN)
 # -----------------------------------------------------------------------------
 total_assigned_all = int(summary_df["total_works"].sum())
 total_overdue_all = int(summary_df["overdue_works"].sum())
@@ -1734,35 +1961,39 @@ overall_overdue_pct = (
     else 0.0
 )
 
-active_scope_parts = [f"{LABEL_DIV_EN}: {selected_division}"]
-if selected_subdivision != ALL_OPTION:
-    active_scope_parts.append(f"{LABEL_SUBDIV_EN}: {selected_subdivision}")
-if selected_ee != ALL_OPTION:
-    active_scope_parts.append(f"EE: {selected_ee}")
-if selected_ta != ALL_OPTION:
-    active_scope_parts.append(f"TA: {selected_ta}")
-if selected_as != ALL_OPTION:
-    active_scope_parts.append(f"AS: {selected_as}")
+active_scope_parts = [
+    f"{LABEL_DIV_EN}: {selected_division}",
+    f"{LABEL_SUBDIV_EN}: {selected_subdivision}",
+    f"EE: {selected_ee}",
+    f"TA: {selected_ta}",
+    f"AS: {selected_as}",
+]
 filter_scope_label = " | ".join(active_scope_parts)
 
 st.markdown(
     f"""
-    <div class="kpi-grid">
-        <div class="kpi-card-red">
-            <div class="kpi-label">🔴 Overdue Works ('P')</div>
-            <div class="kpi-val">{total_overdue_all:,} ({overall_overdue_pct}%)</div>
+    <div class="kpi-mobile-top-row">
+        <div class="kpi-m-card kpi-blue">
+            <div class="kpi-m-label">📅 Date (Today)</div>
+            <div class="kpi-m-val">{today_str}</div>
         </div>
-        <div class="kpi-card-green">
-            <div class="kpi-label">🟢 'ETS' Works</div>
-            <div class="kpi-val">{total_ets_all:,}</div>
+        <div class="kpi-m-card kpi-violet">
+            <div class="kpi-m-label">👥 {html.escape(view_choice)}s</div>
+            <div class="kpi-m-val">{named_officers_count:,}</div>
         </div>
-        <div class="kpi-card">
-            <div class="kpi-label">📋 Total Works</div>
-            <div class="kpi-val">{total_assigned_all:,}</div>
+        <div class="kpi-m-card kpi-cyan">
+            <div class="kpi-m-label">📋 Total Works</div>
+            <div class="kpi-m-val">{total_assigned_all:,}</div>
         </div>
-        <div class="kpi-card">
-            <div class="kpi-label">👥 {view_choice}s</div>
-            <div class="kpi-val">{named_officers_count:,}</div>
+    </div>
+    <div class="kpi-mobile-bottom-row">
+        <div class="kpi-m-card kpi-red">
+            <div class="kpi-m-label">🔴 Overdue Works ('Progress')</div>
+            <div class="kpi-m-val">{total_overdue_all:,} ({overall_overdue_pct}%)</div>
+        </div>
+        <div class="kpi-m-card kpi-green">
+            <div class="kpi-m-label">🟢 'ETS' Works</div>
+            <div class="kpi-m-val">{total_ets_all:,}</div>
         </div>
     </div>
     """,
@@ -1770,9 +2001,17 @@ st.markdown(
 )
 
 # =============================================================================
-# SECTION 1 (FIRST): MOBILE PORTRAIT HORIZONTAL BAR CHART
+# SECTION 1: OFFICER OVERDUE SCORECARDS (REPLACES CRAMPED MOBILE BAR CHART)
 # =============================================================================
-st.markdown(f"##### 📈 Overdue & ETS Works by {view_choice}")
+st.markdown(
+    f"""
+    <div class="exec-section-banner">
+        <div class="exec-section-title">📈 Overdue & ETS Works by {html.escape(view_choice)} ({html.escape(sort_choice)})</div>
+        <div class="exec-scope-badge">{html.escape(filter_scope_label)}</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 if hide_zero_overdue:
     chart_source_df = summary_df[
@@ -1781,192 +2020,49 @@ if hide_zero_overdue:
 else:
     chart_source_df = summary_df.copy()
 
-st.markdown(
-    """
-    <div class="legend-bar">
-        <span><span class="dot-red">■</span> Overdue ('P')</span>
-        <span><span class="dot-green">■</span> ETS Works</span>
-        <span><span class="dot-grey">■</span> Rest of Works</span>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
 if chart_source_df.empty:
     st.info(
         "No officers match the current filter (try unchecking 'Show only officers with Overdue > 0' in the sidebar)."
     )
 else:
-    plot_df = chart_source_df.iloc[::-1].copy()
-    plot_df["y_short"] = plot_df[view_choice].map(lambda s: shorten_mobile_label(s, 14))
-    plot_df["overdue_plus_ets"] = plot_df["overdue_works"] + plot_df["ets_works"]
-    plot_df["is_shrunk"] = shrink_outliers & (
-        plot_df["total_works"] > BAR_SHRINK_THRESHOLD
+    search_officer_query = st.text_input(
+        f"🔍 Quick Search {view_choice} Name (Optional):",
+        value="",
+        placeholder=f"Type {view_choice} name to filter list...",
     )
-
-    if shrink_outliers:
-        plot_df["vis_total"] = plot_df["total_works"].map(compress_bar_length)
-        plot_df["vis_overdue_plus_ets"] = plot_df["overdue_plus_ets"].map(
-            compress_bar_length
-        )
-        plot_df["vis_overdue"] = plot_df["overdue_works"].map(compress_bar_length)
+    if search_officer_query.strip():
+        q_str = search_officer_query.strip().lower()
+        display_scorecard_df = chart_source_df[
+            chart_source_df[view_choice].astype(str).str.lower().str.contains(q_str, na=False)
+        ].copy()
     else:
-        plot_df["vis_total"] = plot_df["total_works"].astype(float)
-        plot_df["vis_overdue_plus_ets"] = plot_df["overdue_plus_ets"].astype(float)
-        plot_df["vis_overdue"] = plot_df["overdue_works"].astype(float)
+        display_scorecard_df = chart_source_df
 
-    def _build_mobile_bar_label(r) -> str:
-        shrink_tag = (
-            f" <span style='color:#FBBF24'>[>{BAR_SHRINK_THRESHOLD}]</span>"
-            if r["is_shrunk"]
-            else ""
+    if display_scorecard_df.empty:
+        st.warning(f"No {view_choice} found matching '{search_officer_query}'.")
+    else:
+        st.caption(
+            f"Showing **{len(display_scorecard_df)}** {view_choice}(s) — swipe inside the box below to view all:"
         )
-        if sort_choice == "Highest Overdue Percentage (%) at Top":
-            return (
-                f" <b>{r['overdue_pct']:.1f}%</b> "
-                f"({int(r['overdue_works'])} OD | "
-                f"<span style='color:#4ADE80'>{int(r['ets_works'])} ETS</span> / "
-                f"{int(r['total_works'])}){shrink_tag}"
-            )
-        return (
-            f" <b>{int(r['overdue_works'])} OD</b> | "
-            f"<span style='color:#4ADE80'>{int(r['ets_works'])} ETS</span> / "
-            f"{int(r['total_works'])} ({r['overdue_pct']:.1f}%){shrink_tag}"
+        st.markdown(
+            render_mobile_officer_scorecards(display_scorecard_df, view_choice),
+            unsafe_allow_html=True,
         )
-
-    plot_df["bar_label"] = plot_df.apply(_build_mobile_bar_label, axis=1)
-
-    fig = go.Figure()
-
-    fig.add_trace(
-        go.Bar(
-            y=plot_df[view_choice],
-            x=plot_df["vis_total"],
-            name="Rest of Works",
-            orientation="h",
-            marker=dict(
-                color="rgba(148, 163, 184, 0.28)",
-                line=dict(color="#64748B", width=1),
-            ),
-            text=plot_df["bar_label"],
-            textposition="outside",
-            textfont=dict(size=10.5),
-            cliponaxis=False,
-            customdata=plot_df[
-                [
-                    view_choice,
-                    "total_works",
-                    "overdue_works",
-                    "ets_works",
-                    "rest_works",
-                    "overdue_pct",
-                ]
-            ],
-            hovertemplate=(
-                "<b>%{customdata[0]}</b><br>"
-                "🔴 Overdue ('P'): <b>%{customdata[2]}</b> (%{customdata[5]:.1f}%)<br>"
-                "🟢 ETS Works: <b>%{customdata[3]}</b><br>"
-                "⚪ Rest of Works: <b>%{customdata[4]}</b><br>"
-                "📋 Total Works: <b>%{customdata[1]}</b><extra></extra>"
-            ),
-        )
-    )
-
-    fig.add_trace(
-        go.Bar(
-            y=plot_df[view_choice],
-            x=plot_df["vis_overdue_plus_ets"],
-            name="ETS Works",
-            orientation="h",
-            marker=dict(color="#4ADE80"),
-            customdata=plot_df[
-                [
-                    view_choice,
-                    "total_works",
-                    "overdue_works",
-                    "ets_works",
-                    "rest_works",
-                    "overdue_pct",
-                ]
-            ],
-            hovertemplate=(
-                "<b>%{customdata[0]}</b><br>"
-                "🟢 ETS Works: <b>%{customdata[3]}</b><br>"
-                "🔴 Overdue ('P'): <b>%{customdata[2]}</b> (%{customdata[5]:.1f}%)<br>"
-                "📋 Total Works: <b>%{customdata[1]}</b><extra></extra>"
-            ),
-        )
-    )
-
-    fig.add_trace(
-        go.Bar(
-            y=plot_df[view_choice],
-            x=plot_df["vis_overdue"],
-            name="Overdue Works ('P')",
-            orientation="h",
-            marker=dict(color="#EF4444"),
-            customdata=plot_df[
-                [
-                    view_choice,
-                    "total_works",
-                    "overdue_works",
-                    "ets_works",
-                    "rest_works",
-                    "overdue_pct",
-                ]
-            ],
-            hovertemplate=(
-                "<b>%{customdata[0]}</b><br>"
-                "🔴 Overdue ('P'): <b>%{customdata[2]}</b> (%{customdata[5]:.1f}%)<br>"
-                "🟢 ETS Works: <b>%{customdata[3]}</b><br>"
-                "📋 Total Works: <b>%{customdata[1]}</b><extra></extra>"
-            ),
-        )
-    )
-
-    max_x = max(float(plot_df["vis_total"].max()), 1.0)
-    x_range_max = max_x * 1.58
-    chart_height = max(360, len(plot_df) * 32 + 50)
-
-    fig.update_layout(
-        barmode="overlay",
-        height=chart_height,
-        bargap=0.24,
-        showlegend=False,
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(15, 23, 42, 0.35)",
-        xaxis=dict(
-            title="",
-            range=[0, x_range_max],
-            gridcolor="rgba(148, 163, 184, 0.14)",
-            zeroline=True,
-            fixedrange=True,
-            showticklabels=False,
-        ),
-        yaxis=dict(
-            title="",
-            automargin=False,
-            tickmode="array",
-            tickvals=plot_df[view_choice],
-            ticktext=plot_df["y_short"],
-            tickfont=dict(size=11),
-            fixedrange=True,
-        ),
-        margin=dict(l=108, r=14, t=8, b=16),
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True,
-        config={"displayModeBar": False, "scrollZoom": False},
-    )
 
 st.divider()
 
 # =============================================================================
-# SECTION 2 (SECOND): COMBINED OVERDUE WORKS TABLE (ENGLISH HEADERS + OVERDUE BY)
+# SECTION 2: COMBINED OVERDUE WORKS (MOBILE DOSSIER CARDS - NO HORIZONTAL SCROLL)
 # =============================================================================
-st.markdown(f"##### 📂 Combined Overdue Works by {view_choice}")
+st.markdown(
+    f"""
+    <div class="exec-section-banner">
+        <div class="exec-section-title">📂 Combined Overdue Works by {html.escape(view_choice)}</div>
+        <div class="exec-scope-badge">{html.escape(filter_scope_label)}</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 officer_options = (
     chart_source_df[view_choice].tolist()
@@ -1985,11 +2081,11 @@ officer_stats_map = {
 }
 
 selected_officer = st.selectbox(
-    f"Tap to select {view_choice}:",
+    f"Tap to select {view_choice} to inspect their Overdue Works:",
     options=officer_options,
     index=0 if officer_options else None,
     format_func=lambda name: (
-        f"{name} ({officer_stats_map[name][0]} OD | "
+        f"{name} ({officer_stats_map[name][0]} Overdue | "
         f"{officer_stats_map[name][1]} ETS / {officer_stats_map[name][2]} Total — "
         f"{officer_stats_map[name][3]:.1f}%)"
     ),
@@ -2102,17 +2198,42 @@ if selected_officer:
                     use_container_width=True,
                 )
 
-            st.markdown(
-                render_ce_overdue_html_table(officer_overdue_df),
-                unsafe_allow_html=True,
+            mobile_display_mode = st.radio(
+                "📱 Display Format:",
+                options=[
+                    "📱 Mobile Work Cards (Easy Read — No Side Scrolling)",
+                    "📋 Classic Table (Horizontal Scroll)",
+                ],
+                horizontal=True,
             )
+
+            if mobile_display_mode.startswith("📱"):
+                st.markdown(
+                    render_mobile_work_dossier_cards(
+                        officer_overdue_df, opposite_officer_en
+                    ),
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    render_ce_overdue_html_table(officer_overdue_df),
+                    unsafe_allow_html=True,
+                )
 
 st.divider()
 
 # =============================================================================
-# SECTION 3 (THIRD): OFFICER-WISE SUMMARY TABLE (ENGLISH)
+# SECTION 3: OFFICER-WISE SUMMARY TABLE (ENGLISH)
 # =============================================================================
-st.markdown(f"##### 📋 Officer-Wise Summary Table — [{filter_scope_label}]")
+st.markdown(
+    f"""
+    <div class="exec-section-banner">
+        <div class="exec-section-title">📋 Officer-Wise Summary Table</div>
+        <div class="exec-scope-badge">{html.escape(filter_scope_label)}</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 display_table = summary_df[
     [
