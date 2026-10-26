@@ -75,7 +75,7 @@ st.markdown(
             min-height: 32px !important;
         }
 
-        /* 2. Strictly 1-Line Mobile Header (Stepped Up 1 Size) */
+        /* 2. Strictly 1-Line Mobile Header */
         .premium-compact-header {
             display: flex;
             align-items: center;
@@ -150,13 +150,13 @@ st.markdown(
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
         }
 
-        /* Prevent text cursor on dropdowns */
+        /* Prevent virtual keyboard from popping up on mobile dropdowns */
         div[data-baseweb="select"] input {
+            pointer-events: none !important;
             caret-color: transparent !important;
-            cursor: pointer !important;
         }
 
-        /* 4. 5-Box Mobile KPI Grid (Matching PC Colors: Blue, Violet, Cyan, Red, Green) */
+        /* 4. 5-Box Mobile KPI Grid */
         .kpi-mobile-top-row {
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
@@ -438,65 +438,6 @@ st.markdown(
             color: #FCA5A5;
         }
 
-        /* Fallback Compact Table CSS (Horizontal Scroll Only) */
-        .ce-table-wrapper {
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-            border: 1px solid rgba(148, 163, 184, 0.22);
-            border-radius: 12px;
-            background: rgba(15, 23, 42, 0.78);
-            margin-top: 0.35rem;
-            margin-bottom: 0.75rem;
-        }
-        table.ce-overdue-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.78rem;
-            color: #E2E8F0;
-        }
-        table.ce-overdue-table thead th {
-            background: #273346;
-            color: #F1F5F9;
-            font-weight: 700;
-            text-align: left;
-            padding: 9px 8px;
-            border-bottom: 2px solid #3B82F6;
-            white-space: nowrap;
-        }
-        table.ce-overdue-table tbody tr {
-            border-bottom: 1px solid rgba(148, 163, 184, 0.12);
-        }
-        table.ce-overdue-table td {
-            padding: 7px 8px;
-            vertical-align: middle;
-        }
-        .ce-work-name-cell {
-            min-width: 220px;
-            max-width: 280px;
-            white-space: normal;
-        }
-        .ce-work-name-clamp {
-            display: block;
-            line-height: 1.35;
-            font-weight: 600;
-            color: #F8FAFC;
-            white-space: normal;
-            word-wrap: break-word;
-        }
-        .ce-compact-cell {
-            white-space: nowrap;
-        }
-        .ce-date-overdue {
-            color: #FCA5A5;
-            font-weight: 700;
-            white-space: nowrap;
-        }
-        .ce-sl-cell {
-            text-align: center;
-            font-weight: 600;
-            color: #94A3B8;
-        }
-
         hr {
             margin-top: 0.5rem !important;
             margin-bottom: 0.55rem !important;
@@ -506,46 +447,6 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-
-
-# -----------------------------------------------------------------------------
-# PREVENT MOBILE VIRTUAL KEYBOARD FROM POPPING UP ON DROPDOWN TAP
-# -----------------------------------------------------------------------------
-def disable_mobile_select_keyboard():
-    """Locks internal selectbox inputs to readonly/inputmode=none so tapping a dropdown never triggers the phone keyboard."""
-    components.html(
-        """
-        <script>
-        (function() {
-            const parentDoc = window.parent.document;
-
-            function lockSelectInputs() {
-                const inputs = parentDoc.querySelectorAll('div[data-baseweb="select"] input');
-                inputs.forEach(input => {
-                    if (!input.hasAttribute('readonly')) {
-                        input.setAttribute('readonly', 'readonly');
-                    }
-                    if (input.getAttribute('inputmode') !== 'none') {
-                        input.setAttribute('inputmode', 'none');
-                    }
-                });
-            }
-
-            lockSelectInputs();
-
-            if (!window.parent.__miSelectKeyboardObserver) {
-                const observer = new MutationObserver(() => {
-                    lockSelectInputs();
-                });
-                observer.observe(parentDoc.body, { childList: true, subtree: true });
-                window.parent.__miSelectKeyboardObserver = observer;
-            }
-        })();
-        </script>
-        """,
-        height=0,
-        width=0,
-    )
 
 
 # -----------------------------------------------------------------------------
@@ -604,15 +505,15 @@ DEFAULT_SHEET_URL = st.secrets.get(
     "https://docs.google.com/spreadsheets/d/13W04z-fdU3RhuVJ5vQFRpK4BBSQRJWfscPqpr7Oj2Y8/edit?gid=1055199869#gid=1055199869",
 )
 
-SCHEMA_VERSION = "v14_ce_mobile_fullpage"
-DISK_BACKUP_FILE = "/tmp/mi_overdue_shared_snapshot_v14_mob.pkl"
+SCHEMA_VERSION = "v15_ce_mobile_clean"
+DISK_BACKUP_FILE = "/tmp/mi_overdue_shared_snapshot_v15_mob.pkl"
 
 
 # -----------------------------------------------------------------------------
 # SHARED SERVER MEMORY & LOCK
 # -----------------------------------------------------------------------------
 @st.cache_resource
-def get_shared_state_v14_mob() -> dict:
+def get_shared_state_v15_mob() -> dict:
     state = {
         "version": SCHEMA_VERSION,
         "lock": threading.Lock(),
@@ -1050,14 +951,8 @@ def map_officer_or_unassigned(name: str) -> str:
     return name
 
 
-def display_clean_cell(val: str) -> str:
-    if not val or val in {UNSPECIFIED_LABEL, UNASSIGNED_LABEL}:
-        return "-"
-    return val
-
-
 # -----------------------------------------------------------------------------
-# MOBILE RENDERERS: 1) OFFICER SCORECARDS & 2) WORK DOSSIER CARDS
+# MOBILE RENDERERS: 1) SCORECARDS & 2) DOSSIER CARDS
 # -----------------------------------------------------------------------------
 def render_mobile_officer_scorecards(df_source: pd.DataFrame, officer_col: str) -> str:
     cards_html = []
@@ -1156,51 +1051,6 @@ def render_mobile_work_dossier_cards(
         cards_html.append(card_html)
 
     return f'<div class="work-cards-wrapper">{"".join(cards_html)}</div>'
-
-
-def render_ce_overdue_html_table(df_display: pd.DataFrame) -> str:
-    headers_html = "".join(
-        f"<th>{html.escape(str(col))}</th>" for col in df_display.columns
-    )
-
-    rows_html = []
-    for idx_row, (_, row) in enumerate(df_display.iterrows(), start=1):
-        cells_html = [f'<td class="ce-sl-cell">{idx_row}</td>']
-        for col in df_display.columns[1:]:
-            raw_text = str(row[col]) if pd.notna(row[col]) else "-"
-            escaped_text = html.escape(raw_text if raw_text else "-")
-
-            if col == "Work Name":
-                cells_html.append(
-                    f'<td class="ce-work-name-cell">'
-                    f'<div class="ce-work-name-clamp">{escaped_text}</div>'
-                    f"</td>"
-                )
-            elif col in ["Target Date", "Overdue By"]:
-                cells_html.append(
-                    f'<td class="ce-date-overdue">{escaped_text}</td>'
-                )
-            else:
-                cells_html.append(
-                    f'<td class="ce-compact-cell">{escaped_text}</td>'
-                )
-        rows_html.append(f"<tr>{''.join(cells_html)}</tr>")
-
-    return (
-        f'<div class="ce-table-wrapper">'
-        f'<table class="ce-overdue-table">'
-        f"<thead><tr>{headers_html}</tr></thead>"
-        f"<tbody>{''.join(rows_html)}</tbody>"
-        f"</table>"
-        f"</div>"
-    )
-
-
-def convert_df_to_excel_bytes(df: pd.DataFrame) -> bytes:
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Overdue_Works")
-    return output.getvalue()
 
 
 def parse_xlsx_workbook(workbook_bytes: bytes):
@@ -1872,32 +1722,16 @@ if chart_source_df.empty:
         "No officers match the current filter (try unchecking 'Show only officers with Overdue > 0' in the sidebar)."
     )
 else:
-    search_officer_query = st.text_input(
-        f"🔍 Quick Search {view_choice} Name (Optional):",
-        value="",
-        placeholder=f"Type {view_choice} name to filter list...",
+    st.caption(f"Showing **{len(chart_source_df)}** {view_choice}(s):")
+    st.markdown(
+        render_mobile_officer_scorecards(chart_source_df, view_choice),
+        unsafe_allow_html=True,
     )
-    if search_officer_query.strip():
-        q_str = search_officer_query.strip().lower()
-        display_scorecard_df = chart_source_df[
-            chart_source_df[view_choice].astype(str).str.lower().str.contains(q_str, na=False)
-        ].copy()
-    else:
-        display_scorecard_df = chart_source_df
-
-    if display_scorecard_df.empty:
-        st.warning(f"No {view_choice} found matching '{search_officer_query}'.")
-    else:
-        st.caption(f"Showing **{len(display_scorecard_df)}** {view_choice}(s):")
-        st.markdown(
-            render_mobile_officer_scorecards(display_scorecard_df, view_choice),
-            unsafe_allow_html=True,
-        )
 
 st.divider()
 
 # =============================================================================
-# SECTION 2: COMBINED OVERDUE WORKS (FULL HEIGHT — NO INNER SCROLLER)
+# SECTION 2: COMBINED OVERDUE WORKS (MOBILE DOSSIER CARDS - NO INNER SCROLLER)
 # =============================================================================
 st.markdown(
     f"""
@@ -1909,66 +1743,43 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-officer_options = (
-    chart_source_df[view_choice].tolist()
-    if not chart_source_df.empty
-    else summary_df[view_choice].tolist()
-)
+if overdue_full_df.empty:
+    st.info("No overdue works found across the 23 worksheets.")
+else:
+    officer_overdue_df = overdue_full_df.copy()
 
-officer_stats_map = {
-    row[view_choice]: (
-        int(row["overdue_works"]),
-        int(row["ets_works"]),
-        int(row["total_works"]),
-        float(row["overdue_pct"]),
-    )
-    for _, row in summary_df.iterrows()
-}
+    # Filter by the active scope selections from the top
+    if selected_division != ALL_OPTION:
+        officer_overdue_df = officer_overdue_df[
+            officer_overdue_df["_division_name"] == selected_division
+        ]
+    if selected_subdivision != ALL_OPTION:
+        officer_overdue_df = officer_overdue_df[
+            officer_overdue_df["_subdivision_name"] == selected_subdivision
+        ]
+    if selected_ee != ALL_OPTION:
+        officer_overdue_df = officer_overdue_df[
+            officer_overdue_df["_ee_name"] == selected_ee
+        ]
+    if selected_ta != ALL_OPTION:
+        officer_overdue_df = officer_overdue_df[
+            officer_overdue_df["_ta_name"] == selected_ta
+        ]
+    if selected_as != ALL_OPTION:
+        officer_overdue_df = officer_overdue_df[
+            officer_overdue_df["_as_name"] == selected_as
+        ]
+        
+    if not show_unassigned_bar:
+        officer_overdue_df = officer_overdue_df[
+            officer_overdue_df[full_filter_col] != UNASSIGNED_LABEL
+        ]
 
-selected_officer = st.selectbox(
-    f"Tap to select {view_choice} to inspect their Overdue Works:",
-    options=officer_options,
-    index=0 if officer_options else None,
-    format_func=lambda name: (
-        f"{name} ({officer_stats_map[name][0]} Overdue | "
-        f"{officer_stats_map[name][1]} ETS / {officer_stats_map[name][2]} Total — "
-        f"{officer_stats_map[name][3]:.1f}%)"
-    ),
-)
-
-if selected_officer:
-    if overdue_full_df.empty:
-        st.info("No overdue works found across the 23 worksheets.")
+    if officer_overdue_df.empty:
+        st.success(
+            f"🎉 **0** overdue works in **{filter_scope_label}**!"
+        )
     else:
-        officer_overdue_df = overdue_full_df[
-            overdue_full_df[full_filter_col] == selected_officer
-        ].copy()
-
-        if selected_division != ALL_OPTION:
-            officer_overdue_df = officer_overdue_df[
-                officer_overdue_df["_division_name"] == selected_division
-            ].copy()
-
-        if selected_subdivision != ALL_OPTION:
-            officer_overdue_df = officer_overdue_df[
-                officer_overdue_df["_subdivision_name"] == selected_subdivision
-            ].copy()
-
-        if selected_ee != ALL_OPTION:
-            officer_overdue_df = officer_overdue_df[
-                officer_overdue_df["_ee_name"] == selected_ee
-            ].copy()
-
-        if selected_ta != ALL_OPTION:
-            officer_overdue_df = officer_overdue_df[
-                officer_overdue_df["_ta_name"] == selected_ta
-            ].copy()
-
-        if selected_as != ALL_OPTION:
-            officer_overdue_df = officer_overdue_df[
-                officer_overdue_df["_as_name"] == selected_as
-            ].copy()
-
         opposite_officer_col = (
             COL_AEE_KN if view_choice == LABEL_AE_EN else COL_SO_KN
         )
@@ -2004,66 +1815,17 @@ if selected_officer:
         officer_overdue_df.rename(columns=rename_map, inplace=True)
         officer_overdue_df.insert(0, "Sl. No.", range(1, len(officer_overdue_df) + 1))
 
-        if officer_overdue_df.empty:
-            st.success(
-                f"🎉 **{selected_officer}** has **0** overdue works in **{filter_scope_label}**!"
-            )
-        else:
-            hoa_involved = officer_overdue_df["H.O.A."].unique().tolist()
-            st.caption(
-                f"**Selected {view_choice}:** `{selected_officer}` &nbsp;|&nbsp; "
-                f"**Overdue Works:** `{len(officer_overdue_df)}` &nbsp;|&nbsp; "
-                f"**H.O.A.:** `{', '.join(hoa_involved)}`"
-            )
+        # Show exactly how many filtered works are displayed
+        st.caption(
+            f"Showing **{len(officer_overdue_df)}** Total Overdue Works matching the current filter:"
+        )
 
-            safe_name = (
-                re.sub(r"[^\w\-]+", "_", selected_officer).strip("_") or "Unassigned"
-            )
-            safe_div = (
-                re.sub(r"[^\w\-]+", "_", selected_division).strip("_") or "All_Div"
-            )
-            excel_bytes = convert_df_to_excel_bytes(officer_overdue_df)
-            csv_bytes = officer_overdue_df.to_csv(index=False).encode("utf-8-sig")
-
-            dl1, dl2 = st.columns(2)
-            with dl1:
-                st.download_button(
-                    label="📥 Excel (.xlsx)",
-                    data=excel_bytes,
-                    file_name=f"Overdue_Works_{safe_div}_{safe_name}_{today_str}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                )
-            with dl2:
-                st.download_button(
-                    label="📥 CSV (.csv)",
-                    data=csv_bytes,
-                    file_name=f"Overdue_Works_{safe_div}_{safe_name}_{today_str}.csv",
-                    mime="text/csv",
-                    use_container_width=True,
-                )
-
-            mobile_display_mode = st.radio(
-                "📱 Display Format:",
-                options=[
-                    "📱 Mobile Work Cards (Easy Read — No Side Scrolling)",
-                    "📋 Classic Table (Horizontal Scroll)",
-                ],
-                horizontal=True,
-            )
-
-            if mobile_display_mode.startswith("📱"):
-                st.markdown(
-                    render_mobile_work_dossier_cards(
-                        officer_overdue_df, opposite_officer_en
-                    ),
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.markdown(
-                    render_ce_overdue_html_table(officer_overdue_df),
-                    unsafe_allow_html=True,
-                )
+        st.markdown(
+            render_mobile_work_dossier_cards(
+                officer_overdue_df, opposite_officer_en
+            ),
+            unsafe_allow_html=True,
+        )
 
 with st.expander("🔍 Inspect Worksheet Loading Status & Quick Sync (23 Target Sheets)"):
     if st.button(
@@ -2081,6 +1843,3 @@ with st.expander("🔍 Inspect Worksheet Loading Status & Quick Sync (23 Target 
                 )
                 st.rerun()
     st.dataframe(diag_df, use_container_width=True)
-
-# Prevent mobile virtual keyboard from appearing when tapping any dropdown
-disable_mobile_select_keyboard()
