@@ -438,6 +438,65 @@ st.markdown(
             color: #FCA5A5;
         }
 
+        /* Fallback Compact Table CSS (Horizontal Scroll Only) */
+        .ce-table-wrapper {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            border: 1px solid rgba(148, 163, 184, 0.22);
+            border-radius: 12px;
+            background: rgba(15, 23, 42, 0.78);
+            margin-top: 0.35rem;
+            margin-bottom: 0.75rem;
+        }
+        table.ce-overdue-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.78rem;
+            color: #E2E8F0;
+        }
+        table.ce-overdue-table thead th {
+            background: #273346;
+            color: #F1F5F9;
+            font-weight: 700;
+            text-align: left;
+            padding: 9px 8px;
+            border-bottom: 2px solid #3B82F6;
+            white-space: nowrap;
+        }
+        table.ce-overdue-table tbody tr {
+            border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+        }
+        table.ce-overdue-table td {
+            padding: 7px 8px;
+            vertical-align: middle;
+        }
+        .ce-work-name-cell {
+            min-width: 220px;
+            max-width: 280px;
+            white-space: normal;
+        }
+        .ce-work-name-clamp {
+            display: block;
+            line-height: 1.35;
+            font-weight: 600;
+            color: #F8FAFC;
+            white-space: normal;
+            word-wrap: break-word;
+        }
+        .ce-compact-cell {
+            white-space: nowrap;
+        }
+        .ce-date-overdue {
+            color: #FCA5A5;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .ce-sl-cell {
+            text-align: center;
+            font-weight: 600;
+            color: #94A3B8;
+        }
+
         hr {
             margin-top: 0.5rem !important;
             margin-bottom: 0.55rem !important;
@@ -505,15 +564,15 @@ DEFAULT_SHEET_URL = st.secrets.get(
     "https://docs.google.com/spreadsheets/d/13W04z-fdU3RhuVJ5vQFRpK4BBSQRJWfscPqpr7Oj2Y8/edit?gid=1055199869#gid=1055199869",
 )
 
-SCHEMA_VERSION = "v15_ce_mobile_clean"
-DISK_BACKUP_FILE = "/tmp/mi_overdue_shared_snapshot_v15_mob.pkl"
+SCHEMA_VERSION = "v16_ce_mobile_clean"
+DISK_BACKUP_FILE = "/tmp/mi_overdue_shared_snapshot_v16_mob.pkl"
 
 
 # -----------------------------------------------------------------------------
 # SHARED SERVER MEMORY & LOCK
 # -----------------------------------------------------------------------------
 @st.cache_resource
-def get_shared_state_v15_mob() -> dict:
+def get_shared_state_v16_mob() -> dict:
     state = {
         "version": SCHEMA_VERSION,
         "lock": threading.Lock(),
@@ -1433,7 +1492,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-shared_state = get_shared_state_v14_mob()
+shared_state = get_shared_state_v16_mob()
 
 needs_fresh_load = (
     shared_state["data"] is None
